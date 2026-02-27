@@ -99,14 +99,14 @@ function plugin_switchIdent_addCbElastic($wrapper, $sw) {
 	}
 
 	$sw.css({
-		'background': 'transparent',
+		'background-color': 'transparent',
 		'border': 'none',
 		'font-weight': 'bold',
 		'color': 'inherit',
 		'box-shadow': 'none',
 		'max-width': '200px',
 		'text-overflow': 'ellipsis',
-		'padding': '0 0.25em'
+		'padding': '0 1.2em 0 0.25em'
 	});
 
 	// Hide original username text and elements
