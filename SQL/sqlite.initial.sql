@@ -84,3 +84,5 @@ CREATE TABLE ident_switch
 CREATE INDEX IX_ident_switch_user_id ON ident_switch(user_id);
 CREATE INDEX IX_ident_switch_iid ON ident_switch(iid);
 CREATE INDEX IX_ident_switch_parent_id ON ident_switch(parent_id);
+
+INSERT INTO system (name, value) VALUES ('ident_switch-version', '2026021000');

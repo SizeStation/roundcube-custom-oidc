@@ -86,3 +86,5 @@ CREATE TABLE IF NOT EXISTS `ident_switch`
 	INDEX `IX_ident_switch_iid`(`iid`),
 	INDEX `IX_ident_switch_parent_id`(`parent_id`)
 );
+
+INSERT INTO `system` (`name`, `value`) VALUES ('ident_switch-version', '2026021000');
