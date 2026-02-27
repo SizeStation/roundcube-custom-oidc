@@ -736,6 +736,9 @@ class IdentSwitchForm
             ];
         }
 
+        // Re-run JS init on each form render (handles AJAX identity loads)
+        $rc->output->add_script('plugin_switchIdent_init();', 'docready');
+
         return $args;
     }
 
@@ -926,11 +929,11 @@ class IdentSwitchForm
     }
 
     /**
-     * Fill in missing validated data from preconfig when identity is readonly.
+     * Enforce readonly preconfig values on validated data.
      *
-     * When a preconfig has readonly=true, form fields are disabled in the
-     * browser and not submitted via POST. This fills the missing values
-     * from the preconfig on the server side.
+     * When a preconfig has readonly=true, this overwrites the validated
+     * data with preconfig values regardless of what the user submitted.
+     * This prevents tampering via browser devtools (re-enabling disabled fields).
      *
      * @param array  $data  Validated data from validate(), modified in place.
      * @param string $email Email address of the identity.
@@ -947,26 +950,30 @@ class IdentSwitchForm
         $record = ['email' => $email];
         $preconfig->apply($record);
 
-        // Map simple preconfig record keys to validated data keys
+        // Force preconfig values (overwrite any tampered POST data)
         $map = [
             'ident_switch.form.imap.port' => 'imap.port',
             'ident_switch.form.imap.delimiter' => 'imap.delimiter',
-            'ident_switch.form.imap.username' => 'imap.user',
             'ident_switch.form.smtp.port' => 'smtp.port',
             'ident_switch.form.sieve.port' => 'sieve.port',
         ];
 
         foreach ($map as $recordKey => $dataKey) {
-            if (empty($data[$dataKey]) && isset($record[$recordKey])) {
+            if (isset($record[$recordKey])) {
                 $data[$dataKey] = $record[$recordKey];
             }
         }
 
-        // Compose hosts with security scheme (preconfig stores them separately)
+        // Force username if preconfig defines it
+        if (isset($record['ident_switch.form.imap.username'])) {
+            $data['imap.user'] = $record['ident_switch.form.imap.username'];
+        }
+
+        // Force hosts with security scheme
         foreach (['imap', 'smtp', 'sieve'] as $proto) {
             $hostKey = "ident_switch.form.{$proto}.host";
             $secKey = "ident_switch.form.{$proto}.security";
-            if (empty($data["{$proto}.host"]) && !empty($record[$hostKey])) {
+            if (!empty($record[$hostKey])) {
                 $security = $record[$secKey] ?? '';
                 $data["{$proto}.host"] = self::compose_host_scheme($record[$hostKey], $security);
             }

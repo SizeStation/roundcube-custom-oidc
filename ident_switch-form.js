@@ -19,62 +19,30 @@ var ident_switch_portDefaults = {
 	sieve: { '': 4190, tls: 4190, ssl: 4190 }
 };
 
-$(function() {
+/**
+ * Flag to ensure delegated event handlers are registered only once.
+ */
+var ident_switch_delegated = false;
+
+/**
+ * Initialize the identity form: apply mode visibility, preconfig, placeholders.
+ * Called on each form render (initial page load + AJAX identity loads).
+ */
+function plugin_switchIdent_init() {
+	// Register delegated event handlers once (survive DOM replacements)
+	if (!ident_switch_delegated) {
+		ident_switch_delegated = true;
+		plugin_switchIdent_bindDelegatedEvents();
+	}
+
 	// Apply initial mode visibility
 	var initialMode = $("SELECT[name='_ident_switch.form.common.mode']").val() || 'primary';
 	plugin_switchIdent_mode_onChange(initialMode);
-	plugin_switchIdent_processPreconfig();
 
-	// Bind security change handlers
-	$.each(['imap', 'smtp', 'sieve'], function(i, proto) {
-		var secSel = "SELECT[name='_ident_switch.form." + proto + ".security']";
-		$(secSel).on('change', function() {
-			plugin_switchIdent_onSecurityChange(proto, $(this).val());
-		});
-	});
-
-	// Bind blur handlers for smart placeholder clearing
-	$.each(['imap', 'smtp', 'sieve'], function(i, proto) {
-		var portFld = $("INPUT[name='_ident_switch.form." + proto + ".port']");
-		portFld.on('blur', function() {
-			plugin_switchIdent_clearIfDefault($(this));
-		});
-		var hostFld = $("INPUT[name='_ident_switch.form." + proto + ".host']");
-		hostFld.on('blur', function() {
-			plugin_switchIdent_clearIfDefault($(this));
-		});
-	});
-
-	// IMAP host → update SMTP/Sieve host placeholders
-	$("INPUT[name='_ident_switch.form.imap.host']").on('change blur', function() {
-		var imapHost = $(this).val() || 'localhost';
-		$("INPUT[name='_ident_switch.form.smtp.host']").attr('placeholder', imapHost);
-		$("INPUT[name='_ident_switch.form.sieve.host']").attr('placeholder', imapHost);
-	});
-
-	// Bind auth change handlers for SMTP and Sieve custom credentials
+	// Apply initial auth visibility for SMTP and Sieve
 	$.each(['smtp', 'sieve'], function(i, proto) {
-		var authSel = "SELECT[name='_ident_switch.form." + proto + ".auth']";
-		$(authSel).on('change', function() {
-			plugin_switchIdent_onAuthChange(proto, $(this).val());
-		});
-		// Apply initial visibility
-		plugin_switchIdent_onAuthChange(proto, $(authSel).val());
-	});
-
-	// Delimiter mode handler
-	$("SELECT[name='_ident_switch.form.imap.delimiter_mode']").on('change', function() {
-		if ($(this).val() === 'manual') {
-			$('#ident-switch-delimiter-input').show();
-		} else {
-			$('#ident-switch-delimiter-input').hide();
-			$("INPUT[name='_ident_switch.form.imap.delimiter']").val('');
-		}
-	});
-
-	// Watch email field for dynamic preconfig application
-	$("INPUT[name='_email']").on('change blur', function() {
-		plugin_switchIdent_onEmailChange($(this).val());
+		var authVal = $("SELECT[name='_ident_switch.form." + proto + ".auth']").val();
+		plugin_switchIdent_onAuthChange(proto, authVal);
 	});
 
 	// Set initial placeholders from current field values
@@ -87,6 +55,69 @@ $(function() {
 		$("INPUT[name='_ident_switch.form.smtp.host']").attr('placeholder', initialImapHost);
 		$("INPUT[name='_ident_switch.form.sieve.host']").attr('placeholder', initialImapHost);
 	}
+
+	// Re-apply preconfig from current email (handles form re-render after create abort
+	// where PHP record may lack email, so readonly was not set server-side)
+	if (initialEmail && initialEmail.indexOf('@') > 0) {
+		plugin_switchIdent_onEmailChange(initialEmail);
+	}
+}
+
+/**
+ * Register delegated event handlers on the document.
+ * These survive DOM replacements (AJAX form reloads).
+ */
+function plugin_switchIdent_bindDelegatedEvents() {
+	// Security change handlers
+	$.each(['imap', 'smtp', 'sieve'], function(i, proto) {
+		$(document).on('change', "SELECT[name='_ident_switch.form." + proto + ".security']", function() {
+			plugin_switchIdent_onSecurityChange(proto, $(this).val());
+		});
+	});
+
+	// Blur handlers for smart placeholder clearing
+	$.each(['imap', 'smtp', 'sieve'], function(i, proto) {
+		$(document).on('blur', "INPUT[name='_ident_switch.form." + proto + ".port']", function() {
+			plugin_switchIdent_clearIfDefault($(this));
+		});
+		$(document).on('blur', "INPUT[name='_ident_switch.form." + proto + ".host']", function() {
+			plugin_switchIdent_clearIfDefault($(this));
+		});
+	});
+
+	// IMAP host → update SMTP/Sieve host placeholders
+	$(document).on('change blur', "INPUT[name='_ident_switch.form.imap.host']", function() {
+		var imapHost = $(this).val() || 'localhost';
+		$("INPUT[name='_ident_switch.form.smtp.host']").attr('placeholder', imapHost);
+		$("INPUT[name='_ident_switch.form.sieve.host']").attr('placeholder', imapHost);
+	});
+
+	// Auth change handlers for SMTP and Sieve custom credentials
+	$.each(['smtp', 'sieve'], function(i, proto) {
+		$(document).on('change', "SELECT[name='_ident_switch.form." + proto + ".auth']", function() {
+			plugin_switchIdent_onAuthChange(proto, $(this).val());
+		});
+	});
+
+	// Delimiter mode handler
+	$(document).on('change', "SELECT[name='_ident_switch.form.imap.delimiter_mode']", function() {
+		if ($(this).val() === 'manual') {
+			$('#ident-switch-delimiter-input').show();
+		} else {
+			$('#ident-switch-delimiter-input').hide();
+			$("INPUT[name='_ident_switch.form.imap.delimiter']").val('');
+		}
+	});
+
+	// Watch email field for dynamic preconfig application
+	$(document).on('change blur', "INPUT[name='_email']", function() {
+		plugin_switchIdent_onEmailChange($(this).val());
+	});
+}
+
+// Run init on initial page load
+$(function() {
+	plugin_switchIdent_init();
 });
 
 /**
@@ -193,32 +224,43 @@ function plugin_switchIdent_onAuthChange(proto, authVal) {
 	}
 }
 
+/**
+ * Apply or remove preconfig readonly state on form fields.
+ * Reads the hidden readonly field value and enables/disables fields accordingly.
+ */
 function plugin_switchIdent_processPreconfig() {
 	var disFld = $("INPUT[name='_ident_switch.form.common.readonly']");
 	disFld.parentsUntil("TABLE", "TR").hide();
 
 	var disVal = parseInt(disFld.val(), 10) || 0;
+
+	// All fields that can be locked by preconfig
+	var lockedFields = [
+		"INPUT[name='_ident_switch.form.imap.host']",
+		"SELECT[name='_ident_switch.form.imap.security']",
+		"INPUT[name='_ident_switch.form.imap.port']",
+		"INPUT[name='_ident_switch.form.smtp.host']",
+		"SELECT[name='_ident_switch.form.smtp.security']",
+		"INPUT[name='_ident_switch.form.smtp.port']",
+		"SELECT[name='_ident_switch.form.smtp.auth']",
+		"INPUT[name='_ident_switch.form.smtp.username']",
+		"INPUT[name='_ident_switch.form.smtp.password']",
+		"SELECT[name='_ident_switch.form.imap.delimiter_mode']",
+		"INPUT[name='_ident_switch.form.imap.delimiter']",
+		"INPUT[name='_ident_switch.form.sieve.host']",
+		"SELECT[name='_ident_switch.form.sieve.security']",
+		"INPUT[name='_ident_switch.form.sieve.port']",
+		"SELECT[name='_ident_switch.form.sieve.auth']",
+		"INPUT[name='_ident_switch.form.sieve.username']",
+		"INPUT[name='_ident_switch.form.sieve.password']"
+	];
+
+	// Reset all to enabled first (handles navigation from readonly to non-readonly)
+	$.each(lockedFields, function(_, sel) { $(sel).prop("disabled", false); });
+	$("INPUT[name='_ident_switch.form.imap.username']").prop("disabled", false);
+
 	if (disVal > 0) {
-		$("INPUT[name='_ident_switch.form.imap.host']").prop("disabled", true);
-		$("SELECT[name='_ident_switch.form.imap.security']").prop("disabled", true);
-		$("INPUT[name='_ident_switch.form.imap.port']").prop("disabled", true);
-
-		$("INPUT[name='_ident_switch.form.smtp.host']").prop("disabled", true);
-		$("SELECT[name='_ident_switch.form.smtp.security']").prop("disabled", true);
-		$("INPUT[name='_ident_switch.form.smtp.port']").prop("disabled", true);
-		$("SELECT[name='_ident_switch.form.smtp.auth']").prop("disabled", true);
-		$("INPUT[name='_ident_switch.form.smtp.username']").prop("disabled", true);
-		$("INPUT[name='_ident_switch.form.smtp.password']").prop("disabled", true);
-
-		$("SELECT[name='_ident_switch.form.imap.delimiter_mode']").prop("disabled", true);
-		$("INPUT[name='_ident_switch.form.imap.delimiter']").prop("disabled", true);
-
-		$("INPUT[name='_ident_switch.form.sieve.host']").prop("disabled", true);
-		$("SELECT[name='_ident_switch.form.sieve.security']").prop("disabled", true);
-		$("INPUT[name='_ident_switch.form.sieve.port']").prop("disabled", true);
-		$("SELECT[name='_ident_switch.form.sieve.auth']").prop("disabled", true);
-		$("INPUT[name='_ident_switch.form.sieve.username']").prop("disabled", true);
-		$("INPUT[name='_ident_switch.form.sieve.password']").prop("disabled", true);
+		$.each(lockedFields, function(_, sel) { $(sel).prop("disabled", true); });
 	}
 	if (disVal === 2) {
 		$("INPUT[name='_ident_switch.form.imap.username']").prop("disabled", true);
