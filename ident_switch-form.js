@@ -56,10 +56,13 @@ function plugin_switchIdent_init() {
 		$("INPUT[name='_ident_switch.form.sieve.host']").attr('placeholder', initialImapHost);
 	}
 
-	// Re-apply preconfig from current email (handles form re-render after create abort
-	// where PHP record may lack email, so readonly was not set server-side)
+	// Disable mode select until a valid email is entered
+	var $modeSelect = $("SELECT[name='_ident_switch.form.common.mode']");
 	if (initialEmail && initialEmail.indexOf('@') > 0) {
+		$modeSelect.prop('disabled', false);
 		plugin_switchIdent_onEmailChange(initialEmail);
+	} else {
+		$modeSelect.prop('disabled', true);
 	}
 }
 
@@ -277,6 +280,9 @@ function plugin_switchIdent_onEmailChange(email) {
 
 	var domain = email.substring(atPos + 1).toLowerCase();
 	if (!domain) return;
+
+	// Enable mode select now that we have a valid email
+	$("SELECT[name='_ident_switch.form.common.mode']").prop('disabled', false);
 
 	// Update label and username placeholders to match current email
 	$("INPUT[name='_ident_switch.form.common.label']").attr('placeholder', email);
