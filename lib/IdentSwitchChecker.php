@@ -177,6 +177,9 @@ class IdentSwitchChecker
             $host = 'tls://' . $host;
         }
 
+        $primaryIdentity = $rc->user->get_identity();
+        $primaryName = !empty($primaryIdentity['name']) ? $primaryIdentity['name'] : null;
+
         return [
             'iid' => 0,
             'imap_host' => $host,
@@ -185,7 +188,7 @@ class IdentSwitchChecker
             'username' => $rc->user->data['username'],
             'password' => $_SESSION['password' . $postfix],
             'email' => $rc->user->data['username'],
-            'label' => $_SESSION['global_alias'] ?? $rc->user->data['username'],
+            'label' => $_SESSION['global_alias'] ?? $primaryName ?? $rc->user->data['username'],
             'notify_basic' => null,
             'notify_sound' => null,
             'notify_desktop' => null,

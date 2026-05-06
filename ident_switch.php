@@ -188,7 +188,9 @@ class ident_switch extends rcube_plugin
             $iid = intval($iid_s);
         }
 
-        $accNames = [$_SESSION['global_alias'] ?? $rc->user->data['username']];
+        $primaryIdentity = $rc->user->get_identity();
+        $primaryName = !empty($primaryIdentity['name']) ? $primaryIdentity['name'] : null;
+        $accNames = [$_SESSION['global_alias'] ?? $primaryName ?? $rc->user->data['username']];
         $accValues = [-1];
         $accSelected = -1;
         $iidMap = [0 => -1]; // primary account: iid 0 → select value -1
