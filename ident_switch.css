@@ -27,6 +27,32 @@
 	background-size: 10px 6px;
 }
 
+/*
+ * Prevent flash of original username before JS prepends the switcher.
+ * The JS hides these elements at DOMReady, but the CSS rules below hide them
+ * earlier (during initial render) — only loaded when the switcher will actually
+ * be shown, so users without secondary accounts keep the default username display.
+ */
+
+/* Elastic skin: switcher is prepended inside .header-title.username.
+   Hide the original username via visibility on the parent (affects the text
+   node), then re-show the wrapper. Unlike color/font-size, this preserves the
+   parent's flex/line-height context, keeping the wrapper vertically centered. */
+.header-title.username {
+	visibility: hidden;
+}
+.header-title.username > *:not(.ident-switch-wrapper) {
+	display: none;
+}
+.header-title.username > .ident-switch-wrapper {
+	visibility: visible;
+}
+
+/* Larry skin: switcher is prepended next to .username inside #topline .topright */
+#topline .topright > .username {
+	display: none;
+}
+
 /* Unread badge */
 .ident-switch-badge {
 	flex-shrink: 0;

@@ -67,7 +67,6 @@ function plugin_switchIdent_addCbLarry($wrapper, $sw) {
 
 	$sw.css({
 		'font-weight': 'bold',
-		'max-width': '200px',
 		'text-overflow': 'ellipsis'
 	});
 
@@ -104,7 +103,6 @@ function plugin_switchIdent_addCbElastic($wrapper, $sw) {
 		'font-weight': 'bold',
 		'color': 'inherit',
 		'box-shadow': 'none',
-		'max-width': '200px',
 		'text-overflow': 'ellipsis',
 		'padding': '0 1.2em 0 0.25em'
 	});

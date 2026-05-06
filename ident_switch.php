@@ -158,10 +158,6 @@ class ident_switch extends rcube_plugin
             default => null,
         };
 
-        if ($rc->task === 'mail') {
-            $this->include_stylesheet('ident_switch.css');
-        }
-
         return $args;
     }
 
@@ -218,6 +214,7 @@ class ident_switch extends rcube_plugin
             return;
         }
 
+        $this->include_stylesheet('ident_switch.css');
         $this->include_script('ident_switch-switch.js');
 
         // Pass config to JS environment
