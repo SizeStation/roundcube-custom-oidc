@@ -15,8 +15,12 @@
 	width: 100%;
 }
 
-/* Account switcher <select>: hide native arrow, show SVG chevron */
-.ident-switch-wrapper select {
+/* Account switcher <select>: hide native arrow, show SVG chevron.
+   Scoped to Elastic (.header-title.username) and Larry (#topline .topright) where
+   the switcher replaces a styled header label; Classic uses Roundcube's native
+   select rendering instead (see #taskbar rule below). */
+.header-title.username .ident-switch-wrapper select,
+#topline .topright .ident-switch-wrapper select {
 	cursor: pointer;
 	-webkit-appearance: none;
 	-moz-appearance: none;
@@ -51,6 +55,36 @@
 /* Larry skin: switcher is prepended next to .username inside #topline .topright */
 #topline .topright > .username {
 	display: none;
+}
+
+/* Larry skin: blend the <select> into the dark #topline header (Larry styles a
+   <span> here, not a <select>, so without these the native white control sticks
+   out on the dark background). */
+#topline .topright .ident-switch-wrapper {
+	width: auto;
+}
+#topline .topright .ident-switch-wrapper select {
+	background-color: transparent;
+	border: none;
+	box-shadow: none;
+	color: inherit;
+	font-weight: bold;
+	padding: 0 1.2em 0 0.25em;
+	text-overflow: ellipsis;
+}
+
+/* Classic skin: switcher is prepended inside #taskbar (right-aligned, nowrap, 24px tall).
+   Drop width:100% so it sits inline before the menu links instead of pushing them
+   off-screen. The select keeps Roundcube's default native rendering. */
+#taskbar > .ident-switch-wrapper {
+	width: auto;
+	vertical-align: middle;
+	margin-right: 8px;
+}
+#taskbar > .ident-switch-wrapper select {
+	max-width: 180px;
+	position: relative;
+	top: -2px;
 }
 
 /* Unread badge */

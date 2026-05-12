@@ -57,18 +57,13 @@ $(function() {
 });
 
 /**
- * Place switcher in Larry skin: replace username in top-right corner.
+ * Place switcher in Larry skin: replace username in top-right corner of #topline.
  */
 function plugin_switchIdent_addCbLarry($wrapper, $sw) {
 	var $topRight = $('#topline .topright');
 	if (!$topRight.length) {
 		return false;
 	}
-
-	$sw.css({
-		'font-weight': 'bold',
-		'text-overflow': 'ellipsis'
-	});
 
 	$topRight.find('.username').hide();
 	$topRight.prepend($wrapper);

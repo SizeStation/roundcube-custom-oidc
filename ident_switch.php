@@ -222,7 +222,7 @@ class ident_switch extends rcube_plugin
 
         $select = new html_select([
             'id' => 'plugin-ident_switch-account',
-            'style' => 'display: none; padding: 0;',
+            'style' => 'display: none;',
             'onchange' => 'plugin_switchIdent_switch(this.value);',
         ]);
         $select->add($accNames, $accValues);
