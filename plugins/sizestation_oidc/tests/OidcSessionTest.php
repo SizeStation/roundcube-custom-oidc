@@ -16,6 +16,7 @@ final class OidcSessionTest extends TestCase
             'sizestation_oidc.authorization' => ['state' => 'pending'],
             'sizestation_oidc.used_codes' => ['hash' => 123],
             'sizestation_oidc.preferred_switch_id' => 42,
+            'sizestation_oidc.account_selection_pending' => true,
             'roundcube_core_state' => 'preserved-until-core-logout',
         ];
 

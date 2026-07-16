@@ -33,6 +33,7 @@ class sizestation_oidc extends rcube_plugin
         $this->add_hook('logout_after', [$this, 'onLogoutAfter']);
         $this->register_action('plugin.sizestation_oidc.login', [$this, 'noopAction']);
         $this->register_action('plugin.sizestation_oidc.callback', [$this, 'noopAction']);
+        $this->register_action('plugin.sizestation_oidc.select-account', [$this, 'selectAccountAction']);
     }
 
     /** @param array<string, mixed> $args
@@ -55,6 +56,7 @@ class sizestation_oidc extends rcube_plugin
         }
         if ($task === 'mail') {
             $this->performPendingPreferredSwitch();
+            $this->presentPendingAccountSelection();
 
             return $args;
         }
@@ -239,7 +241,7 @@ class sizestation_oidc extends rcube_plugin
                 $assignmentId,
                 $this->loginPhase->assignments,
             );
-            $this->recordReconciliationCompleted($principalId, $result);
+            $this->recordReconciliationCompleted($principalId, $result, $this->loginPhase->assignments);
             (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->establish($_SESSION, $this->loginPhase);
             try {
                 $this->audit()->record(
@@ -376,6 +378,56 @@ class sizestation_oidc extends rcube_plugin
     {
     }
 
+    public function selectAccountAction(): void
+    {
+        $rc = rcmail::get_instance();
+        $oidcIdentity = (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->identity($_SESSION);
+        $rawId = rcube_utils::get_input_value('_ident-id', rcube_utils::INPUT_POST);
+        if (
+            $oidcIdentity === null
+            || empty($_SESSION['sizestation_oidc.account_selection_pending'])
+            || !is_string($rawId)
+            || !preg_match('/\A(?:-1|[1-9][0-9]*)\z/', $rawId)
+        ) {
+            $rc->output->show_message($this->gettext('secondaryunavailable'), 'error');
+            return;
+        }
+        $recordId = (int) $rawId;
+        if ($recordId === -1) {
+            unset($_SESSION['sizestation_oidc.account_selection_pending']);
+            $rc->output->redirect(['_task' => 'mail', '_mbox' => 'INBOX']);
+            return;
+        }
+        try {
+            if (!$this->selectedManagedRecordAllowed($recordId, (int) $oidcIdentity['principal_id'])) {
+                throw new \RuntimeException('The selected mailbox is not assigned to this principal');
+            }
+            if (!class_exists('IdentSwitchSwitcher')) {
+                throw new \RuntimeException('The account switcher is unavailable');
+            }
+            $switcher = new IdentSwitchSwitcher(new IdentSwitchCredentialService($rc));
+            if (!$switcher->switchAccountById($recordId, false)) {
+                throw new \RuntimeException('The selected mailbox is unavailable');
+            }
+            unset($_SESSION['sizestation_oidc.account_selection_pending']);
+            try {
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::MailboxSwitch,
+                    'user',
+                    'account_selector',
+                    (int) $oidcIdentity['principal_id'],
+                    metadata: ['ident_switch_record_id' => $recordId],
+                    sourceIp: $this->sourceIp(),
+                );
+            } catch (\Throwable) {
+            }
+            $rc->output->redirect(['_task' => 'mail', '_mbox' => 'INBOX']);
+        } catch (\Throwable $exception) {
+            $this->failSafely('account_selection_failed', $exception, false);
+            $rc->output->show_message($this->gettext('secondaryunavailable'), 'error');
+        }
+    }
+
     private function prepareLogout(): void
     {
         $session = new \SizeStation\Roundcube\Oidc\Session\OidcSession();
@@ -396,6 +448,7 @@ class sizestation_oidc extends rcube_plugin
     private function recordReconciliationCompleted(
         int $principalId,
         \SizeStation\Roundcube\Oidc\Reconciliation\ReconciliationResult $result,
+        array $assignments,
     ): void {
         try {
             $this->audit()->record(
@@ -430,7 +483,24 @@ class sizestation_oidc extends rcube_plugin
         }
         if ($result->preferredSwitchRecordId !== null) {
             $_SESSION['sizestation_oidc.preferred_switch_id'] = $result->preferredSwitchRecordId;
+            unset($_SESSION['sizestation_oidc.account_selection_pending']);
+        } elseif ($result->materialized !== [] && !$this->hasEnabledPreference($assignments)) {
+            $_SESSION['sizestation_oidc.account_selection_pending'] = true;
+        } else {
+            unset($_SESSION['sizestation_oidc.account_selection_pending']);
         }
+    }
+
+    /** @param list<array<string, mixed>> $assignments */
+    private function hasEnabledPreference(array $assignments): bool
+    {
+        foreach ($assignments as $assignment) {
+            if (!empty($assignment['enabled']) && !empty($assignment['is_preferred'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function validateEstablishedSession(): bool
@@ -484,6 +554,51 @@ class sizestation_oidc extends rcube_plugin
         } catch (\Throwable $exception) {
             $this->failSafely('preferred_switch_failed', $exception, false);
         }
+    }
+
+    private function presentPendingAccountSelection(): void
+    {
+        if (empty($_SESSION['sizestation_oidc.account_selection_pending'])) {
+            return;
+        }
+        $rc = rcmail::get_instance();
+        $query = $rc->db->query(
+            'SELECT id, label FROM ' . $rc->db->table_name('ident_switch')
+            . ' WHERE user_id = ? AND managed_externally = 1 AND parent_id IS NULL AND flags & 1 > 0'
+            . ' ORDER BY label, id',
+            (int) $rc->user->ID,
+        );
+        $accounts = [[
+            'id' => -1,
+            'label' => (string) ($rc->user->data['username'] ?? $this->gettext('anchormailbox')),
+        ]];
+        while ($row = $rc->db->fetch_assoc($query)) {
+            $accounts[] = ['id' => (int) $row['id'], 'label' => (string) $row['label']];
+        }
+        if (count($accounts) < 2) {
+            unset($_SESSION['sizestation_oidc.account_selection_pending']);
+            return;
+        }
+        $rc->output->set_env('sizestation_oidc_accounts', $accounts);
+        $rc->output->set_env('sizestation_oidc_account_prompt', $this->gettext('selectmailbox'));
+        $this->include_script('account-select.js');
+    }
+
+    private function selectedManagedRecordAllowed(int $recordId, int $principalId): bool
+    {
+        $rc = rcmail::get_instance();
+        $query = $rc->db->query(
+            'SELECT s.id FROM ' . $rc->db->table_name('ident_switch') . ' s'
+            . ' INNER JOIN ' . $rc->db->table_name('sizestation_mailbox_assignments') . ' a'
+            . ' ON a.id = s.managed_assignment_id'
+            . ' WHERE s.id = ? AND s.user_id = ? AND s.managed_externally = 1 AND s.flags & 1 > 0'
+            . ' AND a.principal_id = ? AND a.enabled = 1',
+            $recordId,
+            (int) $rc->user->ID,
+            $principalId,
+        );
+
+        return is_array($rc->db->fetch_assoc($query));
     }
 
     private function returnFromDisabledManagedAssignment(): bool

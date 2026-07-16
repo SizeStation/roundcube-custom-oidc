@@ -40,6 +40,7 @@ final class OidcSession
             $session['sizestation_oidc.authorization'],
             $session['sizestation_oidc.used_codes'],
             $session['sizestation_oidc.preferred_switch_id'],
+            $session['sizestation_oidc.account_selection_pending'],
         );
     }
 }
