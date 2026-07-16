@@ -61,19 +61,26 @@ final class OidcFlowService
             $this->consumeCode($session, $code);
         }
         $metadata = $this->metadata();
-        $token = $this->requestJson(
-            'POST',
-            $metadata->tokenEndpoint,
-            ['Content-Type' => 'application/x-www-form-urlencoded', 'Accept' => 'application/json'],
-            http_build_query([
+        $clientSecret = $this->clientSecret();
+        $tokenRequestBody = http_build_query([
                 'grant_type' => 'authorization_code',
                 'code' => $code,
                 'redirect_uri' => $this->config->redirectUri,
                 'client_id' => $this->config->clientId,
-                'client_secret' => $this->clientSecret(),
+                'client_secret' => $clientSecret,
                 'code_verifier' => $pending['code_verifier'],
-            ], '', '&', PHP_QUERY_RFC3986),
-        );
+            ], '', '&', PHP_QUERY_RFC3986);
+        try {
+            $token = $this->requestJson(
+                'POST',
+                $metadata->tokenEndpoint,
+                ['Content-Type' => 'application/x-www-form-urlencoded', 'Accept' => 'application/json'],
+                $tokenRequestBody,
+            );
+        } finally {
+            $this->erase($clientSecret);
+            $this->erase($tokenRequestBody);
+        }
         $idToken = $token['id_token'] ?? null;
         if (!is_string($idToken) || $idToken === '') {
             throw new RuntimeException('OIDC token response did not include an ID token');
@@ -142,6 +149,14 @@ final class OidcFlowService
         }
 
         return trim($secret);
+    }
+
+    private function erase(string &$value): void
+    {
+        if (function_exists('sodium_memzero')) {
+            sodium_memzero($value);
+        }
+        $value = '';
     }
 
     /** @param array<string, mixed> $session */

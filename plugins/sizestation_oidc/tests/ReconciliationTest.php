@@ -74,6 +74,30 @@ final class ReconciliationTest extends TestCase
         self::assertSame(1, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
     }
 
+    public function testReconciliationRepairsManagedAuthenticationAndNotificationDrift(): void
+    {
+        $assignments = new AssignmentRepository($this->database);
+        $bound = $assignments->bindPending($this->principalId, 'https://issuer.example', 'external-1');
+        $reconciler = new AssignmentReconciler($this->database);
+        $reconciler->reconcile($this->principalId, 10, $bound);
+        $this->database->pdo->exec(
+            'UPDATE ident_switch SET smtp_auth = 0, sieve_auth = 0, notify_check = 0',
+        );
+
+        $reconciler->reconcile($this->principalId, 10, $assignments->forPrincipal(
+            $this->principalId,
+            'https://issuer.example',
+            'external-1',
+        ));
+
+        $row = $this->database->pdo->query(
+            'SELECT smtp_auth, sieve_auth, notify_check FROM ident_switch',
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame(1, (int) $row['smtp_auth']);
+        self::assertSame(1, (int) $row['sieve_auth']);
+        self::assertSame(1, (int) $row['notify_check']);
+    }
+
     public function testDisabledAssignmentDisablesManagedRecordWithoutDeletingIdentity(): void
     {
         $repository = new AssignmentRepository($this->database);

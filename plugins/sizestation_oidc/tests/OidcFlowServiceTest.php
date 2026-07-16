@@ -89,6 +89,16 @@ final class OidcFlowServiceTest extends TestCase
         $this->service(new FakeOidcTransport($metadata, $this->jwks, ''))->authorizationUrl($session);
     }
 
+    public function testRejectsDiscoveryThatAdvertisesPkceWithoutS256(): void
+    {
+        $metadata = $this->metadata();
+        $metadata['code_challenge_methods_supported'] = ['plain'];
+        $session = [];
+
+        $this->expectException(RuntimeException::class);
+        $this->service(new FakeOidcTransport($metadata, $this->jwks, ''))->authorizationUrl($session);
+    }
+
     /** @return array<string, mixed> */
     private function metadata(): array
     {
@@ -98,6 +108,7 @@ final class OidcFlowServiceTest extends TestCase
             'token_endpoint' => 'https://issuer.example/token',
             'jwks_uri' => 'https://issuer.example/jwks',
             'end_session_endpoint' => 'https://issuer.example/logout',
+            'code_challenge_methods_supported' => ['S256'],
         ];
     }
 

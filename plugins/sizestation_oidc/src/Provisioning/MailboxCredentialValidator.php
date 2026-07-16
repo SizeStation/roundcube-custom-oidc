@@ -34,6 +34,7 @@ final class MailboxCredentialValidator
     private function validateImap(string $username, string $password): void
     {
         $stream = $this->connect($this->imapEndpoint);
+        $payload = '';
         try {
             $greeting = $this->readLine($stream);
             if (!str_starts_with($greeting, '* OK')) {
@@ -54,6 +55,7 @@ final class MailboxCredentialValidator
             }
         } finally {
             fclose($stream);
+            $this->erase($payload);
             $this->erase($password);
         }
     }
@@ -61,6 +63,7 @@ final class MailboxCredentialValidator
     private function validateSmtp(string $username, string $password): void
     {
         $stream = $this->connect($this->smtpEndpoint);
+        $payload = '';
         try {
             if (!$this->responseCode($this->readResponse($stream), 220)) {
                 throw new RuntimeException('SMTP validation greeting was rejected');
@@ -78,6 +81,7 @@ final class MailboxCredentialValidator
             }
         } finally {
             fclose($stream);
+            $this->erase($payload);
             $this->erase($password);
         }
     }

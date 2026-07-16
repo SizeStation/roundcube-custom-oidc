@@ -30,6 +30,10 @@ final readonly class ProviderMetadata
         if (!hash_equals($expectedIssuer, $issuer)) {
             throw new RuntimeException('OIDC discovery issuer does not match configuration');
         }
+        $pkceMethods = $document['code_challenge_methods_supported'] ?? null;
+        if (is_array($pkceMethods) && !in_array('S256', $pkceMethods, true)) {
+            throw new RuntimeException('OIDC provider does not advertise PKCE S256 support');
+        }
 
         return new self(
             $issuer,

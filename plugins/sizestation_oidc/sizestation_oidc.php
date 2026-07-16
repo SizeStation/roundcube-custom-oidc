@@ -46,6 +46,9 @@ class sizestation_oidc extends rcube_plugin
 
             return $args;
         }
+        if ($task !== 'login' && !$this->validateEstablishedSession()) {
+            return ['task' => 'login', 'action' => ''];
+        }
         if ($task === 'mail') {
             $this->performPendingPreferredSwitch();
 
@@ -129,7 +132,14 @@ class sizestation_oidc extends rcube_plugin
             }
             $credentials = $this->anchorCredentials()->resolve($assignment);
             $password = $credentials->imapPassword();
-            $args['host'] = $this->requiredConfig('sizestation_oidc.imap_host');
+            $host = $this->requiredConfig('sizestation_oidc.imap_host');
+            $this->runtimeIdentityGuard()->assertAnchorMapping(
+                $this->loginPhase->principal,
+                (string) $assignment['mailbox_address'],
+                $credentials->imapUsername(),
+                $host,
+            );
+            $args['host'] = $host;
             $args['user'] = $credentials->imapUsername();
             $args['pass'] = $password;
             $args['cookiecheck'] = false;
@@ -160,8 +170,8 @@ class sizestation_oidc extends rcube_plugin
         try {
             $this->principals()->activate($principalId, (int) $rc->user->ID);
             $this->assignments()->markAnchorInitialized($assignmentId, $principalId);
-            (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->establish($_SESSION, $this->loginPhase);
             $this->reconcileAfterLogin($principalId, (int) $rc->user->ID);
+            (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->establish($_SESSION, $this->loginPhase);
             $this->audit()->record(
                 \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OidcLoginSuccess,
                 'oidc',
@@ -176,7 +186,10 @@ class sizestation_oidc extends rcube_plugin
 
             return ['_task' => 'mail', '_mbox' => 'INBOX'];
         } catch (\Throwable $exception) {
+            (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->clear($_SESSION);
+            unset($_SESSION['sizestation_oidc.preferred_switch_id']);
             $this->failSafely('oidc_login_finalize_failed', $exception, false);
+            $this->loginPhase = null;
             $rc->kill_session();
 
             return ['_task' => 'login'];
@@ -297,7 +310,30 @@ class sizestation_oidc extends rcube_plugin
                 );
             } catch (\Throwable) {
             }
-            $this->failSafely('reconciliation_failed', $exception, false);
+            throw new \RuntimeException('Assignment reconciliation failed', 0, $exception);
+        }
+    }
+
+    private function validateEstablishedSession(): bool
+    {
+        $session = new \SizeStation\Roundcube\Oidc\Session\OidcSession();
+        $identity = $session->identity($_SESSION);
+        if ($identity === null) {
+            return true;
+        }
+
+        $rc = rcmail::get_instance();
+        try {
+            $this->runtimeIdentityGuard()->assertEstablishedSession($identity, (int) $rc->user->ID);
+
+            return true;
+        } catch (\Throwable $exception) {
+            $session->clear($_SESSION);
+            unset($_SESSION['sizestation_oidc.preferred_switch_id']);
+            $this->failSafely('oidc_session_invalid', $exception);
+            $rc->kill_session();
+
+            return false;
         }
     }
 
@@ -380,6 +416,16 @@ class sizestation_oidc extends rcube_plugin
     private function assignments(): \SizeStation\Roundcube\Oidc\Repository\AssignmentRepository
     {
         return new \SizeStation\Roundcube\Oidc\Repository\AssignmentRepository(rcmail::get_instance()->db);
+    }
+
+    private function runtimeIdentityGuard(): \SizeStation\Roundcube\Oidc\Service\RuntimeIdentityGuard
+    {
+        $rc = rcmail::get_instance();
+
+        return new \SizeStation\Roundcube\Oidc\Service\RuntimeIdentityGuard(
+            $this->principals(),
+            $rc->db,
+        );
     }
 
     private function audit(): \SizeStation\Roundcube\Oidc\Repository\AuditLogRepository

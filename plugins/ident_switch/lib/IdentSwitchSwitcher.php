@@ -46,15 +46,13 @@ class IdentSwitchSwitcher
         $rc = rcmail::get_instance();
         $my_postfix_len = strlen(ident_switch::MY_POSTFIX);
 
-        $rc->session->remove('folders');
-        $rc->session->remove('unseen_count');
-
-        // Reset baseline for the target account so delta goes back to 0
-        $this->reset_baseline($identId === -1 ? 0 : null, $rc, $identId);
-
         if ($identId === -1) {
             // Switch to main account
             ident_switch::write_log('Switching mailbox back to default.');
+
+            $rc->session->remove('folders');
+            $rc->session->remove('unseen_count');
+            $this->reset_baseline(0, $rc, $identId);
 
             // Restore everything with STORAGE*my_postfix
             foreach ($_SESSION as $k => $v) {
@@ -92,28 +90,8 @@ class IdentSwitchSwitcher
                     return false;
                 }
 
-                ident_switch::write_log("Switching mailbox to one for identity with ID = {$r['iid']} (username = '{$r['username']}').");
-
-                if ($_SESSION['username'] === $rc->user->data['username']) {
-                    // If we are in default account now - save values
-                    foreach ($_SESSION as $k => $v) {
-                        if (str_starts_with(strtolower($k), 'storage') && !str_ends_with($k, ident_switch::MY_POSTFIX)) {
-                            if (!isset($_SESSION[$k . ident_switch::MY_POSTFIX])) {
-                                $_SESSION[$k . ident_switch::MY_POSTFIX] = $_SESSION[$k];
-                            }
-                            $rc->session->remove($k);
-                        }
-                    }
-
-                    foreach (['password', 'imap_delimiter'] as $k) {
-                        if (!isset($_SESSION[$k . ident_switch::MY_POSTFIX])) {
-                            $_SESSION[$k . ident_switch::MY_POSTFIX] = $_SESSION[$k];
-                        }
-                        $rc->session->remove($k);
-                    }
-                }
-
-                if ($this->credentials->isManaged($r)) {
+                $managed = $this->credentials->isManaged($r);
+                if ($managed) {
                     $r['imap_host'] = $rc->config->get('ident_switch.managed_imap_host');
                     $r['imap_port'] = $rc->config->get('ident_switch.managed_imap_port');
                     if (!$this->validManagedEndpoint($r['imap_host'], $r['imap_port'])) {
@@ -135,6 +113,36 @@ class IdentSwitchSwitcher
                 $port = $r['imap_port'] ?: $def_port;
 
                 $delimiter = $r['imap_delimiter'] ?: null;
+
+                if ($managed && !$this->validateTargetConnection($r, $credentials, $host, $ssl, (int) $port)) {
+                    return false;
+                }
+
+                ident_switch::write_log("Switching mailbox to one for identity with ID = {$r['iid']} (username = '{$r['username']}').");
+
+                // Validation is complete. Only now mutate the active mailbox session.
+                $rc->session->remove('folders');
+                $rc->session->remove('unseen_count');
+                $this->reset_baseline(null, $rc, $identId);
+
+                if ($_SESSION['username'] === $rc->user->data['username']) {
+                    // If we are in default account now - save values
+                    foreach ($_SESSION as $k => $v) {
+                        if (str_starts_with(strtolower($k), 'storage') && !str_ends_with($k, ident_switch::MY_POSTFIX)) {
+                            if (!isset($_SESSION[$k . ident_switch::MY_POSTFIX])) {
+                                $_SESSION[$k . ident_switch::MY_POSTFIX] = $_SESSION[$k];
+                            }
+                            $rc->session->remove($k);
+                        }
+                    }
+
+                    foreach (['password', 'imap_delimiter'] as $k) {
+                        if (!isset($_SESSION[$k . ident_switch::MY_POSTFIX])) {
+                            $_SESSION[$k . ident_switch::MY_POSTFIX] = $_SESSION[$k];
+                        }
+                        $rc->session->remove($k);
+                    }
+                }
 
                 $_SESSION['storage_host'] = $host;
                 $_SESSION['storage_ssl'] = $ssl;
@@ -308,6 +316,10 @@ class IdentSwitchSwitcher
                 ? $rc->config->get('ident_switch.managed_sieve_host')
                 : $r['sieve_host'];
             if (empty($sieveHost)) {
+                if ($this->credentials->isManaged($r)) {
+                    $this->managedEndpointError((int) $r['iid'], 'Sieve');
+                }
+
                 return $args;
             }
 
@@ -315,7 +327,11 @@ class IdentSwitchSwitcher
                 ? $rc->config->get('ident_switch.managed_sieve_port')
                 : $r['sieve_port'];
             $sievePort = $sievePort ?: 4190;
-            $args['host'] = $sieveHost . ':' . $sievePort;
+            if ($this->credentials->isManaged($r) && !$this->validManagedEndpoint($sieveHost, $sievePort)) {
+                $this->managedEndpointError((int) $r['iid'], 'Sieve');
+
+                return $args;
+            }
 
             $authMode = (int)$r['sieve_auth'];
             $credentials = null;
@@ -339,6 +355,7 @@ class IdentSwitchSwitcher
                 $args['user'] = '';
                 $args['password'] = '';
             }
+            $args['host'] = $sieveHost . ':' . $sievePort;
 
             ident_switch::debug_log("Sieve: iid={$iid}, host={$args['host']}, user={$args['user']}");
         }
@@ -513,6 +530,32 @@ class IdentSwitchSwitcher
             && is_numeric($port)
             && (int) $port > 0
             && (int) $port <= 65535;
+    }
+
+    /** @param array<string, mixed> $account */
+    private function validateTargetConnection(
+        array $account,
+        \SizeStation\Roundcube\Credentials\AccountCredentials $credentials,
+        string $host,
+        ?string $ssl,
+        int $port,
+    ): bool {
+        $imap = new rcube_imap_generic();
+        $connected = $imap->connect($host, $credentials->imapUsername(), $credentials->imapPassword(), [
+            'port' => $port,
+            'ssl_mode' => $ssl,
+            'timeout' => 5,
+        ]);
+        if (!$connected) {
+            ident_switch::write_log("IMAP connection validation failed for identity {$account['iid']}.");
+            rcmail::get_instance()->output->show_message('ident_switch.err.credential', 'error');
+
+            return false;
+        }
+
+        $imap->closeConnection();
+
+        return true;
     }
 
     private function managedEndpointError(int $identityId, string $protocol): void

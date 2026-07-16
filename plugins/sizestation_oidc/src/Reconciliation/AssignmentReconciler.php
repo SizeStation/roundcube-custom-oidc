@@ -213,12 +213,15 @@ final class AssignmentReconciler
         );
         $query = $this->database->query(
             'UPDATE ' . $this->database->table_name('ident_switch')
-            . ' SET iid = ?, label = ?, flags = flags | ?, credential_provider = ?,'
-            . ' credential_reference = ?, managed_externally = ?'
+            . ' SET iid = ?, label = ?, flags = flags | ?, smtp_auth = ?, sieve_auth = ?,'
+            . ' notify_check = ?, credential_provider = ?, credential_reference = ?, managed_externally = ?'
             . ' WHERE id = ? AND user_id = ? AND managed_assignment_id = ?',
             $identityId,
             $label,
             self::ENABLED,
+            self::AUTH_IMAP,
+            self::AUTH_IMAP,
+            1,
             (string) $assignment['credential_provider'],
             (string) $assignment['credential_reference'],
             1,
