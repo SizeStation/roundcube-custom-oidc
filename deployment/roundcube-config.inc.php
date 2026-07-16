@@ -24,6 +24,10 @@ $config['smtp_pass'] = '%p';
 $config['use_https'] = true;
 $config['session_samesite'] = 'Lax';
 $config['session_path'] = '/';
+$proxyWhitelist = trim((string) getenv('ROUNDCUBE_PROXY_WHITELIST'));
+$config['proxy_whitelist'] = $proxyWhitelist === ''
+    ? []
+    : array_values(array_filter(array_map('trim', explode(',', $proxyWhitelist))));
 
 $config['sizestation_oidc.enabled'] = true;
 $config['sizestation_oidc.issuer'] = 'https://auth.sizestation.cloud/application/o/roundcube/';

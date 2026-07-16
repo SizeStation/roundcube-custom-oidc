@@ -470,7 +470,7 @@ class sizestation_oidc extends rcube_plugin
 
     private function sourceIp(): ?string
     {
-        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+        $ip = class_exists('rcube_utils') ? rcube_utils::remote_addr() : ($_SERVER['REMOTE_ADDR'] ?? null);
 
         return is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null;
     }

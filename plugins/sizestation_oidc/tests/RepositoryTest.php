@@ -66,6 +66,7 @@ namespace SizeStation\Roundcube\Tests\Oidc {
     use SizeStation\Roundcube\Oidc\Audit\AuditEvent;
     use SizeStation\Roundcube\Oidc\Repository\AssignmentRepository;
     use SizeStation\Roundcube\Oidc\Repository\AuditLogRepository;
+    use SizeStation\Roundcube\Oidc\Repository\CallbackSecurityRepository;
     use SizeStation\Roundcube\Oidc\Repository\PrincipalRepository;
     use SizeStation\Roundcube\Oidc\Repository\RepositoryException;
 
@@ -146,6 +147,29 @@ namespace SizeStation\Roundcube\Tests\Oidc {
             self::assertStringNotContainsString('must-not-persist', $json);
             self::assertStringContainsString('[REDACTED]', $json);
             self::assertStringContainsString('safe', $json);
+        }
+
+        public function testAuthorizationCodeClaimIsPersistentAndSingleUse(): void
+        {
+            $repository = new CallbackSecurityRepository($this->database);
+            $repository->claimAuthorizationCode('one-time-code');
+            self::assertSame(1, (int) $this->database->pdo->query(
+                'SELECT COUNT(*) FROM sizestation_oidc_replay_codes',
+            )->fetchColumn());
+
+            $this->expectException(\Throwable::class);
+            $repository->claimAuthorizationCode('one-time-code');
+        }
+
+        public function testCallbackRateLimitIsScopedAndEnforced(): void
+        {
+            $repository = new CallbackSecurityRepository($this->database);
+            $repository->assertAttemptAllowed('192.0.2.10', 2, 300);
+            $repository->assertAttemptAllowed('192.0.2.10', 2, 300);
+            $repository->assertAttemptAllowed('192.0.2.11', 2, 300);
+
+            $this->expectException(\RuntimeException::class);
+            $repository->assertAttemptAllowed('192.0.2.10', 2, 300);
         }
 
         private function insertAnchor(): void

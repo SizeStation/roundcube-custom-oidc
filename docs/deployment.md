@@ -16,6 +16,11 @@ whose SAN matches the service name used in `deployment/roundcube-agent.hcl`.
 - the example CA PEM replaced with the certificate that issued OpenBao's server
   certificate (never its private key).
 
+Set `ROUNDCUBE_PROXY_WHITELIST` to the narrow CIDR used by the Traefik-facing
+overlay (currently `10.0.1.0/24`). Roundcube trusts forwarded client addresses
+only when the immediate peer is in this list. Recheck it whenever the overlay
+network is recreated; never use `0.0.0.0/0`.
+
 Apply `deployment/openbao/runtime-policy.hcl` to a renewable Agent AppRole. Set
 its token use count to unlimited so Agent renewal works. Apply
 `deployment/openbao/provisioning-policy.hcl` to a distinct administrative

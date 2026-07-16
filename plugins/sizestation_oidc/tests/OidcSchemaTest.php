@@ -19,6 +19,8 @@ final class OidcSchemaTest extends TestCase
             'sizestation_oidc_principals',
             'sizestation_mailbox_assignments',
             'sizestation_oidc_audit_log',
+            'sizestation_oidc_replay_codes',
+            'sizestation_oidc_rate_limits',
         ];
         foreach ($tables as $table) {
             $count = $database->query(

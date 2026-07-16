@@ -32,6 +32,8 @@ services:
       ROUNDCUBE_OIDC_CLIENT_ID: "REPLACE_WITH_AUTHENTIK_CLIENT_ID"
       ROUNDCUBEMAIL_DB_TYPE: sqlite
       ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE: 25M
+      # Verified current `public` overlay CIDR; update if the network is recreated.
+      ROUNDCUBE_PROXY_WHITELIST: "10.0.1.0/24"
     configs:
       - source: roundcube_oidc_config
         target: /var/roundcube/config/sizestation_oidc.php
