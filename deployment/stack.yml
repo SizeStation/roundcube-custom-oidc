@@ -1,0 +1,79 @@
+services:
+  roundcube-bao-agent:
+    image: openbao/openbao:2.5.5
+    user: "33:33"
+    command: ["agent", "-config=/etc/openbao/agent.hcl"]
+    configs:
+      - source: roundcube_bao_agent
+        target: /etc/openbao/agent.hcl
+      - source: openbao_ca
+        target: /etc/openbao/ca/openbao-ca.pem
+    secrets:
+      - roundcube_bao_role_id
+      - roundcube_bao_secret_id
+    volumes:
+      - roundcube-bao-files:/run/app-secrets
+    networks: [openbao]
+    deploy:
+      replicas: 1
+      restart_policy: {condition: any, delay: 5s}
+
+  roundcube:
+    # Build this repository, push it to your registry, and replace the digest.
+    image: ghcr.io/sizestation/roundcube-custom-oidc@sha256:REPLACE_WITH_TESTED_DIGEST
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for file in roundcube-des-key oidc-client-secret openbao-token; do
+          until [ -s "/run/app-secrets/$file" ]; do sleep 2; done
+        done
+        exec /docker-entrypoint.sh apache2-foreground
+    environment:
+      ROUNDCUBE_OIDC_CLIENT_ID: "REPLACE_WITH_AUTHENTIK_CLIENT_ID"
+      ROUNDCUBEMAIL_DB_TYPE: sqlite
+      ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE: 25M
+    configs:
+      - source: roundcube_oidc_config
+        target: /var/roundcube/config/sizestation_oidc.php
+      - source: openbao_ca
+        target: /run/openbao-ca.pem
+    volumes:
+      - roundcube_db:/var/roundcube/db
+      - roundcube-bao-files:/run/app-secrets:ro
+    networks: [public, openbao]
+    deploy:
+      replicas: 1
+      restart_policy: {condition: any, delay: 5s}
+      update_config:
+        order: stop-first
+        failure_action: rollback
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.roundcube.rule=Host(`mail.sizestation.cloud`)
+        - traefik.http.routers.roundcube.entrypoints=websecure
+        - traefik.http.routers.roundcube.tls=true
+        - traefik.http.services.roundcube.loadbalancer.server.port=80
+
+volumes:
+  roundcube_db:
+    name: roundcube_db
+  roundcube-bao-files:
+    name: roundcube_bao_files
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=2m,mode=0770,uid=33,gid=33,nosuid,nodev,noexec
+
+networks:
+  public: {external: true}
+  openbao: {external: true}
+
+configs:
+  roundcube_bao_agent: {file: ./deployment/roundcube-agent.hcl}
+  roundcube_oidc_config: {file: ./deployment/roundcube-config.inc.php}
+  openbao_ca: {file: ./deployment/openbao-ca.pem.example}
+
+secrets:
+  roundcube_bao_role_id: {external: true}
+  roundcube_bao_secret_id: {external: true}

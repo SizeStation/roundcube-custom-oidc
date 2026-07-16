@@ -1,0 +1,86 @@
+# Provisioning and operations
+
+Run administration in a one-shot container using the same Roundcube database,
+runtime CA/token for reads, and a separate short-lived provisioning token at
+`/run/admin-secrets/openbao-provisioning-token`. Never add that token to the web
+service or shell history. All examples pipe passwords on standard input; prefer
+an interactive hidden prompt or secret manager rather than `printf` in real use.
+
+Set `IMAGE` to the deployed immutable digest. Use `--dry-run --json` first for
+every mutation.
+
+## Provision before first login
+
+Obtain the immutable Authentik UUID emitted as `sizestation_user_id`. Provision
+exactly one anchor; the anchor is permanent after first successful login.
+
+```sh
+read -s MAIL_PASSWORD
+printf '%s' "$MAIL_PASSWORD" | /var/www/html/bin/sizestation-oidc provision \
+  --issuer https://auth.sizestation.cloud/application/o/roundcube/ \
+  --external-user-id AUTHENTIK_UUID \
+  --mailbox user@sizestation.com \
+  --credential-reference AUTHENTIK_UUID/anchor \
+  --password-stdin --anchor --preferred --json
+unset MAIL_PASSWORD
+```
+
+Add a secondary mailbox with a unique reference and omit `--anchor`. Add
+`--preferred` if it should open automatically after anchor login. The command
+validates IMAP and SMTP by default, writes OpenBao, creates the assignment, and
+never prints the password.
+
+## Rotate and validate
+
+```sh
+read -s MAIL_PASSWORD
+printf '%s' "$MAIL_PASSWORD" | /var/www/html/bin/sizestation-oidc rotate \
+  --assignment-id ASSIGNMENT_UUID --password-stdin --json
+unset MAIL_PASSWORD
+/var/www/html/bin/sizestation-oidc validate \
+  --assignment-id ASSIGNMENT_UUID --json
+```
+
+Rotation writes a new KV v2 version. Existing requests may hold credentials
+only for their current PHP request; the next request resolves the new version.
+
+## Preferred, disable, remove, and principal controls
+
+```sh
+/var/www/html/bin/sizestation-oidc set-preferred --assignment-id UUID --json
+/var/www/html/bin/sizestation-oidc disable --assignment-id UUID --json
+/var/www/html/bin/sizestation-oidc remove --assignment-id UUID --json
+/var/www/html/bin/sizestation-oidc disable-principal --principal-id ID --json
+```
+
+Do not disable/remove the only enabled anchor. `remove` retires the database
+assignment for auditability; add `--delete-secret` only when intentional and
+after confirming no rollback needs the secret. Disabling a principal blocks new
+OIDC login but does not replace a full incident-response session revocation
+procedure.
+
+## Reconcile and audit
+
+```sh
+/var/www/html/bin/sizestation-oidc reconcile --principal-id ID --json
+/var/www/html/bin/sizestation-oidc reconcile --json
+/var/www/html/bin/sizestation-oidc audit --principal-id ID --limit 100 --json
+```
+
+Reconciliation is idempotent. It repairs missing managed identities and switch
+rows, disables orphaned/disabled rows, and restores the preferred mapping. Run
+it after assignment changes and after a partial materialization failure.
+
+## Upgrade the fork
+
+1. fetch the retained `upstream` remote and select an immutable upstream tag;
+2. compare every password/credential call site listed in
+   `docs/ident-switch-upstream-diff.md` against upstream changes;
+3. merge/rebase in a dedicated branch without dropping upstream history;
+4. update the baseline commit and change ledger;
+5. run all distribution, managed/unmanaged regression, schema, image, and
+   end-to-end tests;
+6. publish a new source tag and immutable image digest;
+7. rehearse migrations and rollback on a restored production backup.
+
+Never point production directly at upstream `main`.
