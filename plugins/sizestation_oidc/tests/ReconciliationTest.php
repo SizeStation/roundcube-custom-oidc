@@ -173,8 +173,7 @@ final class ReconciliationTest extends TestCase
         bool $anchor,
         bool $preferred,
         ?string $credentialReference = null,
-    ): void
-    {
+    ): void {
         $statement = $this->database->pdo->prepare(
             'INSERT INTO sizestation_mailbox_assignments ('
             . 'id, issuer, external_user_id, mailbox_address, credential_provider, credential_reference,'
