@@ -35,15 +35,17 @@ final class AdminRepository
         }
         $id = (string) OpaqueId::generate();
         $now = gmdate('Y-m-d\TH:i:s\Z');
+        $principalId = $this->principalId($issuer, $externalUserId);
         $query = $this->database->query(
             'INSERT INTO ' . $this->database->table_name('sizestation_mailbox_assignments')
-            . ' (id, issuer, external_user_id, mailbox_address, display_label, credential_provider,'
+            . ' (id, issuer, external_user_id, principal_id, mailbox_address, display_label, credential_provider,'
             . ' credential_reference, is_anchor, is_preferred, enabled, anchor_guard, preferred_guard,'
-            . ' credential_status, created_by, created_at, updated_at)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            . ' credential_status, created_by, created_at, updated_at, bound_at)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             $id,
             $issuer,
             $externalUserId,
+            $principalId,
             $mailbox,
             $label,
             'openbao',
@@ -57,6 +59,7 @@ final class AdminRepository
             $actor,
             $now,
             $now,
+            $principalId === null ? null : $now,
         );
         if (!$query) {
             throw new RepositoryException('Unable to create mailbox assignment');
@@ -118,17 +121,7 @@ final class AdminRepository
         if (!empty($assignment['is_anchor'])) {
             throw new RuntimeException('Anchor assignments cannot be disabled; disable the principal instead');
         }
-        $query = $this->database->query(
-            'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
-            . ' SET enabled = 0, is_preferred = 0, preferred_guard = NULL, materialization_status = ?,'
-            . ' updated_at = ? WHERE id = ?',
-            'disabled',
-            gmdate('Y-m-d\TH:i:s\Z'),
-            $assignmentId,
-        );
-        if (!$query || $this->database->affected_rows($query) !== 1) {
-            throw new RepositoryException('Unable to disable assignment');
-        }
+        $this->retireMaterializedAssignment($assignment, 'disabled', null);
 
         return $this->requiredAssignment($assignmentId);
     }
@@ -160,18 +153,7 @@ final class AdminRepository
         if (!empty($assignment['is_anchor'])) {
             throw new RuntimeException('Anchor assignments require an explicit anchor migration');
         }
-        $query = $this->database->query(
-            'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
-            . ' SET enabled = 0, is_preferred = 0, preferred_guard = NULL, materialization_status = ?,'
-            . ' credential_status = ?, updated_at = ? WHERE id = ?',
-            'orphaned',
-            'unavailable',
-            gmdate('Y-m-d\TH:i:s\Z'),
-            $assignmentId,
-        );
-        if (!$query || $this->database->affected_rows($query) !== 1) {
-            throw new RepositoryException('Unable to retire assignment');
-        }
+        $this->retireMaterializedAssignment($assignment, 'orphaned', 'unavailable');
 
         return $this->requiredAssignment($assignmentId);
     }
@@ -406,5 +388,65 @@ final class AdminRepository
     private function requiredAssignment(string $assignmentId): array
     {
         return $this->assignment($assignmentId) ?? throw new RuntimeException('Assignment was not found');
+    }
+
+    private function principalId(string $issuer, string $externalUserId): ?int
+    {
+        $query = $this->database->query(
+            'SELECT id FROM ' . $this->database->table_name('sizestation_oidc_principals')
+            . ' WHERE issuer = ? AND external_user_id = ?',
+            $issuer,
+            $externalUserId,
+        );
+        $row = $this->database->fetch_assoc($query);
+
+        return is_array($row) ? (int) $row['id'] : null;
+    }
+
+    /** @param array<string, mixed> $assignment */
+    private function retireMaterializedAssignment(
+        array $assignment,
+        string $materializationStatus,
+        ?string $credentialStatus,
+    ): void {
+        if (!$this->database->startTransaction()) {
+            throw new RepositoryException('Unable to start assignment retirement transaction');
+        }
+        try {
+            $credentialSql = $credentialStatus === null ? '' : ', credential_status = ?';
+            $parameters = [$materializationStatus];
+            if ($credentialStatus !== null) {
+                $parameters[] = $credentialStatus;
+            }
+            $parameters[] = gmdate('Y-m-d\TH:i:s\Z');
+            $parameters[] = (string) $assignment['id'];
+            $query = $this->database->query(
+                'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
+                . ' SET enabled = 0, is_preferred = 0, preferred_guard = NULL, materialization_status = ?'
+                . $credentialSql . ', updated_at = ? WHERE id = ?',
+                ...$parameters,
+            );
+            if (!$query || $this->database->affected_rows($query) !== 1) {
+                throw new RepositoryException('Unable to retire assignment');
+            }
+            if ($assignment['ident_switch_record_id'] !== null) {
+                $switch = $this->database->query(
+                    'UPDATE ' . $this->database->table_name('ident_switch')
+                    . ' SET flags = flags & ? WHERE id = ? AND managed_assignment_id = ? AND managed_externally = 1',
+                    ~1,
+                    (int) $assignment['ident_switch_record_id'],
+                    (string) $assignment['id'],
+                );
+                if (!$switch || $this->database->affected_rows($switch) !== 1) {
+                    throw new RepositoryException('Unable to disable the materialized managed account');
+                }
+            }
+            if (!$this->database->endTransaction()) {
+                throw new RepositoryException('Unable to commit assignment retirement');
+            }
+        } catch (\Throwable $exception) {
+            $this->database->rollbackTransaction();
+            throw $exception;
+        }
     }
 }

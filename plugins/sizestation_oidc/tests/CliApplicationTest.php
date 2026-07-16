@@ -11,6 +11,7 @@ use SizeStation\Roundcube\Credentials\AccountCredentials;
 use SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind;
 use SizeStation\Roundcube\Credentials\Exception\ExternalCredentialException;
 use SizeStation\Roundcube\Oidc\Cli\Application;
+use SizeStation\Roundcube\Oidc\Repository\AdminRepository;
 use SizeStation\Roundcube\Oidc\Repository\PrincipalRepository;
 
 #[RequiresPhpExtension('pdo_sqlite')]
@@ -24,7 +25,14 @@ final class CliApplicationTest extends TestCase
         $pdo = new PDO('sqlite::memory:');
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->exec('CREATE TABLE system (name varchar(64) primary key, value text)');
+        $pdo->exec('CREATE TABLE users (user_id integer PRIMARY KEY, username text)');
+        $pdo->exec('CREATE TABLE identities ('
+            . 'identity_id integer PRIMARY KEY, user_id integer NOT NULL, changed text NOT NULL,'
+            . 'del integer NOT NULL DEFAULT 0, standard integer NOT NULL DEFAULT 0,'
+            . 'name varchar(128) NOT NULL DEFAULT \'\', email varchar(128) NOT NULL DEFAULT \'\','
+            . 'signature text NOT NULL DEFAULT \'\', html_signature integer NOT NULL DEFAULT 0)');
         $pdo->exec(file_get_contents(__DIR__ . '/../SQL/sqlite.initial.sql'));
+        $pdo->exec(file_get_contents(__DIR__ . '/../../ident_switch/SQL/sqlite.initial.sql'));
         $this->database = new \rcube_db($pdo);
         $this->provisioner = new FakeSecretProvisioner();
     }
@@ -290,6 +298,85 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, $secondExit);
         self::assertSame('first-secret', $this->provisioner->writes['mailboxes/shared']['password']);
         self::assertSame([], $this->provisioner->deletes);
+    }
+
+    public function testPostLoginAssignmentIsBoundAndMaterializedImmediately(): void
+    {
+        $principal = (new PrincipalRepository($this->database))->resolveOrCreate(
+            'https://issuer.example',
+            'subject-1',
+            'external-1',
+        );
+        $principalId = (int) $principal['id'];
+        $this->database->pdo->exec("INSERT INTO users (user_id, username) VALUES (10, 'anchor@example.test')");
+        $this->database->pdo->exec(
+            "UPDATE sizestation_oidc_principals SET status = 'active', roundcube_user_id = 10"
+            . " WHERE id = {$principalId}",
+        );
+
+        [$anchorExit] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor', '--anchor', '--password-stdin', '--json',
+        ], "anchor-secret\n");
+        [$secondaryExit, $secondaryOutput] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=secondary@example.test',
+            '--credential-reference=mailboxes/secondary', '--password-stdin', '--json',
+        ], "secondary-secret\n");
+        $secondaryId = (string) json_decode(
+            $secondaryOutput,
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        )['assignment_id'];
+
+        self::assertSame(0, $anchorExit);
+        self::assertSame(0, $secondaryExit);
+        self::assertSame($principalId, (int) $this->database->pdo->query(
+            "SELECT principal_id FROM sizestation_mailbox_assignments WHERE id = '{$secondaryId}'",
+        )->fetchColumn());
+        self::assertSame(1, (int) $this->database->pdo->query(
+            "SELECT COUNT(*) FROM ident_switch WHERE managed_assignment_id = '{$secondaryId}'",
+        )->fetchColumn());
+    }
+
+    public function testSourceDisableImmediatelyDisablesMaterializedSwitchRecord(): void
+    {
+        $principal = (new PrincipalRepository($this->database))->resolveOrCreate(
+            'https://issuer.example',
+            'subject-1',
+            'external-1',
+        );
+        $principalId = (int) $principal['id'];
+        $this->database->pdo->exec("INSERT INTO users (user_id, username) VALUES (10, 'anchor@example.test')");
+        $this->database->pdo->exec(
+            "UPDATE sizestation_oidc_principals SET status = 'active', roundcube_user_id = 10"
+            . " WHERE id = {$principalId}",
+        );
+        $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor', '--anchor', '--password-stdin', '--json',
+        ], "anchor-secret\n");
+        [, $secondaryOutput] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=secondary@example.test',
+            '--credential-reference=mailboxes/secondary', '--password-stdin', '--json',
+        ], "secondary-secret\n");
+        $secondaryId = (string) json_decode(
+            $secondaryOutput,
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        )['assignment_id'];
+
+        (new AdminRepository($this->database))->disableAssignment($secondaryId);
+
+        self::assertSame(0, (int) $this->database->pdo->query(
+            "SELECT flags & 1 FROM ident_switch WHERE managed_assignment_id = '{$secondaryId}'",
+        )->fetchColumn());
+        self::assertSame(0, (int) $this->database->pdo->query(
+            "SELECT enabled FROM sizestation_mailbox_assignments WHERE id = '{$secondaryId}'",
+        )->fetchColumn());
     }
 
     public function testAdministrativeAssignmentLifecycleIsAuditedAndSecretSafe(): void

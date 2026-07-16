@@ -163,6 +163,7 @@ final class Application
                 (string) $assignment['id'],
                 ['mailbox' => $assignment['mailbox_address']],
             );
+            $this->reconcilePrincipalOf($assignment);
 
             return [
                 'ok' => true,
@@ -620,7 +621,11 @@ final class Application
             return;
         }
         $principals = (new AdminRepository($this->database))->principals((int) $assignment['principal_id']);
-        if ($principals !== [] && $principals[0]['roundcube_user_id'] !== null) {
+        if (
+            $principals !== []
+            && $principals[0]['roundcube_user_id'] !== null
+            && $principals[0]['status'] === 'active'
+        ) {
             $this->reconcilePrincipal($principals[0]);
         }
     }
