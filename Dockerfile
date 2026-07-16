@@ -4,6 +4,7 @@ WORKDIR /build
 COPY composer.json composer.lock ./
 COPY packages/credentials/composer.json packages/credentials/composer.json
 COPY packages/credentials/src packages/credentials/src
+COPY plugins/sizestation_oidc/src plugins/sizestation_oidc/src
 RUN composer install \
     --no-dev \
     --no-interaction \

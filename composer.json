@@ -20,6 +20,11 @@
             }
         }
     ],
+    "autoload": {
+        "psr-4": {
+            "SizeStation\\Roundcube\\Oidc\\": "plugins/sizestation_oidc/src/"
+        }
+    },
     "autoload-dev": {
         "psr-4": {
             "SizeStation\\Roundcube\\Tests\\": "tests/"

@@ -8,6 +8,11 @@
         "roundcube/plugin-installer": ">=0.3.0",
         "sizestation/roundcube-credentials": "dev-main"
     },
+    "autoload": {
+        "psr-4": {
+            "SizeStation\\Roundcube\\Oidc\\": "src/"
+        }
+    },
     "extra": {
         "roundcube": {
             "min-version": "1.7",
