@@ -1,0 +1,4 @@
+.inspection/
+.phpunit.cache/
+vendor/
+
