@@ -27,6 +27,7 @@ LABEL org.opencontainers.image.source="https://github.com/SizeStation/roundcube-
       org.opencontainers.image.licenses="AGPL-3.0-or-later"
 
 COPY --from=dependencies /build/vendor /opt/sizestation/vendor
+COPY plugins/sizestation_oidc/src /opt/sizestation/plugins/sizestation_oidc/src
 COPY plugins/ident_switch /usr/src/roundcubemail/plugins/ident_switch
 COPY plugins/sizestation_oidc /usr/src/roundcubemail/plugins/sizestation_oidc
 COPY bin/sizestation-oidc /usr/src/roundcubemail/bin/sizestation-oidc
@@ -40,4 +41,5 @@ RUN test -f /opt/sizestation/vendor/autoload.php \
     && test -f /usr/src/roundcubemail/skins/elastic2022/meta.json \
     && chmod 0755 /usr/src/roundcubemail/bin/sizestation-oidc \
     && php -l /usr/src/roundcubemail/bin/sizestation-oidc \
+    && php -r 'require "/opt/sizestation/vendor/autoload.php"; exit(class_exists("SizeStation\\Roundcube\\Oidc\\Cli\\Application") ? 0 : 1);' \
     && php -r 'require "/usr/src/roundcubemail/program/include/iniset.php"; require "/usr/src/roundcubemail/plugins/ident_switch/ident_switch.php"; exit(class_exists("IdentSwitchCredentialService") ? 0 : 1);'
