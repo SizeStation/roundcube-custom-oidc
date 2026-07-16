@@ -46,6 +46,7 @@ final class Application
         try {
             $command = $argv[1] ?? 'help';
             $options = $this->options(array_slice($argv, 2));
+            $json = $this->jsonOutput($options, $json);
             $result = match ($command) {
                 'provision', 'assignment:create' => $this->provision($options, $stdin),
                 'rotate', 'assignment:rotate-secret' => $this->rotate($options, $stdin),
@@ -62,9 +63,9 @@ final class Application
                 'principal:enable' => $this->enablePrincipal($options),
                 'principal:list' => $this->listPrincipals($options),
                 'principal:show' => $this->showPrincipal($options),
-                'sync:user' => $this->reconcileUser($options),
-                'reconcile', 'sync:all' => $this->reconcile($options),
-                'audit' => $this->audit($options),
+                'sync:user', 'reconcile:user' => $this->reconcileUser($options),
+                'reconcile', 'sync:all', 'reconcile:all' => $this->reconcile($options),
+                'audit', 'audit:list' => $this->audit($options),
                 'help', '--help', '-h' => ['help' => self::usage()],
                 default => throw new RuntimeException('Unknown administrative command'),
             };
@@ -713,6 +714,20 @@ final class Application
         return (int) $value;
     }
 
+    /** @param array<string, string|bool> $options */
+    private function jsonOutput(array $options, bool $legacyJson): bool
+    {
+        $format = $options['format'] ?? null;
+        if ($format === null) {
+            return $legacyJson;
+        }
+        if (!is_string($format) || !in_array($format, ['human', 'json'], true)) {
+            throw new RuntimeException('Option --format must be human or json');
+        }
+
+        return $format === 'json';
+    }
+
     /** @param array<string, string|bool> $options
      *  @param resource $stdin
      */
@@ -844,11 +859,12 @@ Commands:
   assignment:set-anchor|assignment:set-preferred|assignment:clear-preferred --assignment-id UUID
   assignment:validate --assignment-id UUID
   assignment:rotate-secret --assignment-id UUID --password-stdin [--username ADDRESS]
-  sync:user --principal-id ID
-  sync:all
-  audit [--principal-id ID] [--limit NUMBER]
+  sync:user|reconcile:user --principal-id ID
+  sync:all|reconcile:all
+  audit:list [--principal-id ID] [--limit NUMBER]
 
-Mutation commands support --dry-run. All commands support --json.
+Mutation commands support --dry-run. All commands support --format human|json.
+The legacy --json flag remains accepted for compatibility.
 Passwords are accepted only from standard input and are never printed.
 Legacy shorthand commands remain accepted for compatibility.
 USAGE;

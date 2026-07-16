@@ -150,6 +150,39 @@ final class CliApplicationTest extends TestCase
         self::assertStringContainsString('operation_rejected', $stderr);
     }
 
+    public function testCanonicalReconcileAndAuditCommandsSupportStructuredOutput(): void
+    {
+        [$reconcileExit, $reconcileOutput] = $this->runApplication([
+            'sizestation-oidc',
+            'reconcile:all',
+            '--format=json',
+        ], '');
+        [$auditExit, $auditOutput] = $this->runApplication([
+            'sizestation-oidc',
+            'audit:list',
+            '--format',
+            'json',
+        ], '');
+
+        self::assertSame(0, $reconcileExit);
+        self::assertSame([], json_decode($reconcileOutput, true, flags: JSON_THROW_ON_ERROR)['results']);
+        self::assertSame(0, $auditExit);
+        self::assertSame([], json_decode($auditOutput, true, flags: JSON_THROW_ON_ERROR)['events']);
+    }
+
+    public function testInvalidOutputFormatIsRejected(): void
+    {
+        [$exit, $stdout, $stderr] = $this->runApplication([
+            'sizestation-oidc',
+            'principal:list',
+            '--format=yaml',
+        ], '');
+
+        self::assertSame(1, $exit);
+        self::assertSame('', $stdout);
+        self::assertStringContainsString('operation_rejected', $stderr);
+    }
+
     public function testProvisionRejectsCredentialUsernameThatDiffersFromMailbox(): void
     {
         [$exit, $stdout, $stderr] = $this->runApplication([
