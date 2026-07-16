@@ -130,7 +130,7 @@ final class CliApplicationTest extends TestCase
 
         self::assertSame(1, $exit);
         self::assertSame('', $stdout);
-        self::assertStringContainsString('operation_failed', $stderr);
+        self::assertStringContainsString('operation_rejected', $stderr);
         self::assertSame(['mailboxes/anchor'], $this->provisioner->deletes);
         self::assertSame(0, (int) $this->database->pdo->query(
             'SELECT COUNT(*) FROM sizestation_mailbox_assignments',
