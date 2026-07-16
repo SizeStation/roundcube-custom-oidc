@@ -35,6 +35,11 @@ final class OidcSession
     /** @param array<string, mixed> $session */
     public function clear(array &$session): void
     {
-        unset($session[self::KEY], $session['sizestation_oidc.authorization'], $session['sizestation_oidc.used_codes']);
+        unset(
+            $session[self::KEY],
+            $session['sizestation_oidc.authorization'],
+            $session['sizestation_oidc.used_codes'],
+            $session['sizestation_oidc.preferred_switch_id'],
+        );
     }
 }

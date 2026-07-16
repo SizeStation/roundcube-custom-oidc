@@ -99,6 +99,25 @@ final class OidcFlowServiceTest extends TestCase
         $this->service(new FakeOidcTransport($metadata, $this->jwks, ''))->authorizationUrl($session);
     }
 
+    public function testBuildsEndSessionUrlWithFixedSameOriginRedirect(): void
+    {
+        $url = $this->service(new FakeOidcTransport($this->metadata(), $this->jwks, ''))
+            ->endSessionUrl('https://mail.example.test/signed-out');
+        self::assertIsString($url);
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        self::assertSame('https://issuer.example/logout', strtok($url, '?'));
+        self::assertSame('https://mail.example.test/signed-out', $query['post_logout_redirect_uri']);
+        self::assertSame('roundcube-client', $query['client_id']);
+    }
+
+    public function testRejectsCrossOriginPostLogoutRedirect(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->service(new FakeOidcTransport($this->metadata(), $this->jwks, ''))
+            ->endSessionUrl('https://attacker.example/steal-session');
+    }
+
     /** @return array<string, mixed> */
     private function metadata(): array
     {

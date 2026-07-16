@@ -100,6 +100,7 @@ final class OidcFlowService
 
     public function endSessionUrl(string $postLogoutRedirectUri, ?string $idTokenHint = null): ?string
     {
+        $this->assertSafePostLogoutRedirect($postLogoutRedirectUri);
         $metadata = $this->metadata();
         if ($metadata->endSessionEndpoint === null) {
             return null;
@@ -110,6 +111,25 @@ final class OidcFlowService
         }
 
         return $metadata->endSessionEndpoint . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    }
+
+    private function assertSafePostLogoutRedirect(string $url): void
+    {
+        $redirect = parse_url($url);
+        $callback = parse_url($this->config->redirectUri);
+        if (
+            !is_array($redirect)
+            || !is_array($callback)
+            || ($redirect['scheme'] ?? null) !== 'https'
+            || !isset($redirect['host'], $callback['host'])
+            || !hash_equals(strtolower((string) $callback['host']), strtolower((string) $redirect['host']))
+            || (int) ($callback['port'] ?? 443) !== (int) ($redirect['port'] ?? 443)
+            || isset($redirect['user'])
+            || isset($redirect['pass'])
+            || isset($redirect['fragment'])
+        ) {
+            throw new RuntimeException('OIDC post-logout redirect is not allow-listed');
+        }
     }
 
     private function metadata(): ProviderMetadata
