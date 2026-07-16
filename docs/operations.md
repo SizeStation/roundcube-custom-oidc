@@ -9,6 +9,27 @@ an interactive hidden prompt or secret manager rather than `printf` in real use.
 Set `IMAGE` to the deployed immutable digest. Use `--dry-run --json` first for
 every mutation.
 
+On the single Swarm manager, invoke the CLI in a one-shot container. First
+write a short-lived provisioning token to a root-owned `0600` file outside the
+repository. The general command is:
+
+```sh
+docker run --rm -i --network public \
+  --mount source=roundcube_db,target=/var/roundcube/db \
+  --mount source=roundcube_bao_files,target=/run/app-secrets,readonly \
+  --mount type=bind,src="$PWD/deployment/roundcube-config.inc.php",dst=/var/roundcube/config/sizestation_oidc.php,readonly \
+  --mount type=bind,src=/root/.secrets/openbao-provisioning-token,dst=/run/admin-secrets/openbao-provisioning-token,readonly \
+  -e ROUNDCUBEMAIL_DB_TYPE=sqlite \
+  -e ROUNDCUBE_OIDC_CLIENT_ID=AUTHENTIK_CLIENT_ID \
+  --entrypoint /docker-entrypoint.sh "$IMAGE" \
+  bin/sizestation-oidc COMMAND_AND_OPTIONS
+```
+
+Remove the token file immediately after the administration window. The
+long-running web service never receives it. In the examples below,
+`/var/www/html/bin/sizestation-oidc ...` denotes the `COMMAND_AND_OPTIONS` tail
+inside that one-shot container.
+
 ## Provision before first login
 
 Obtain the immutable Authentik UUID emitted as `sizestation_user_id`. Provision

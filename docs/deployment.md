@@ -60,14 +60,18 @@ Stop Roundcube, take a storage-level snapshot, and also copy the SQLite database
 to a timestamped backup on the server. Confirm the backup is non-empty before
 continuing. Do not migrate while the old container can write to SQLite.
 
-Run a one-shot container using the new image, the existing DB volume, and the
-same Roundcube DB configuration:
+Run two one-shot containers using the new image and existing DB volume. The
+explicit entrypoint first installs/configures the pinned Roundcube tree, then
+executes the requested plugin initializer:
 
 ```sh
 docker run --rm --mount source=roundcube_db,target=/var/roundcube/db \
-  IMAGE_DIGEST /bin/sh -ec \
-  '/var/www/html/bin/initdb.sh --dir=/var/www/html/plugins/ident_switch/SQL &&
-   /var/www/html/bin/initdb.sh --dir=/var/www/html/plugins/sizestation_oidc/SQL'
+  --entrypoint /docker-entrypoint.sh -e ROUNDCUBEMAIL_DB_TYPE=sqlite \
+  IMAGE_DIGEST bin/initdb.sh --dir=/var/www/html/plugins/ident_switch/SQL
+
+docker run --rm --mount source=roundcube_db,target=/var/roundcube/db \
+  --entrypoint /docker-entrypoint.sh -e ROUNDCUBEMAIL_DB_TYPE=sqlite \
+  IMAGE_DIGEST bin/initdb.sh --dir=/var/www/html/plugins/sizestation_oidc/SQL
 ```
 
 This initializes both plugins on the current fresh live database. For later
