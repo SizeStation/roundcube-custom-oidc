@@ -10,3 +10,11 @@ patches remain reviewable.
 
 - Added an empty `tests` directory so the distribution-level PHPUnit suite can
   discover fork tests as they are introduced. No upstream runtime code changed.
+
+## Shared credential-provider foundation
+
+- Added the distribution-owned `sizestation/roundcube-credentials` package with
+  a provider interface/registry, protocol-aware credential value object,
+  request-local cache, sanitized error types, and legacy database provider.
+- No `ident_switch` runtime path uses the registry in this commit. This isolates
+  and tests legacy decryption semantics before the switching refactor.
