@@ -91,6 +91,21 @@ final class OidcFlowServiceTest extends TestCase
         $this->service(new FakeOidcTransport($metadata, $this->jwks, ''))->authorizationUrl($session);
     }
 
+    public function testRejectsCrossOriginDiscoveryEndpoints(): void
+    {
+        foreach (['authorization_endpoint', 'token_endpoint', 'jwks_uri', 'end_session_endpoint'] as $key) {
+            $metadata = $this->metadata();
+            $metadata[$key] = 'https://attacker.example/internal-probe';
+            $session = [];
+            try {
+                $this->service(new FakeOidcTransport($metadata, $this->jwks, ''))->authorizationUrl($session);
+                self::fail("Cross-origin {$key} must be rejected");
+            } catch (RuntimeException) {
+                self::assertSame([], $session);
+            }
+        }
+    }
+
     public function testRejectsDiscoveryThatAdvertisesPkceWithoutS256(): void
     {
         $metadata = $this->metadata();

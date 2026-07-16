@@ -16,10 +16,10 @@ final readonly class ProviderMetadata
         public ?string $endSessionEndpoint,
     ) {
         foreach ([$authorizationEndpoint, $tokenEndpoint, $jwksUri] as $url) {
-            self::assertEndpoint($url);
+            self::assertEndpoint($url, $issuer);
         }
         if ($endSessionEndpoint !== null) {
-            self::assertEndpoint($endSessionEndpoint);
+            self::assertEndpoint($endSessionEndpoint, $issuer);
         }
     }
 
@@ -63,18 +63,24 @@ final readonly class ProviderMetadata
         return is_string($value) && $value !== '' ? $value : null;
     }
 
-    private static function assertEndpoint(string $url): void
+    private static function assertEndpoint(string $url, string $issuer): void
     {
         $parts = parse_url($url);
+        $issuerParts = parse_url($issuer);
         if (
             !is_array($parts)
+            || !is_array($issuerParts)
             || ($parts['scheme'] ?? null) !== 'https'
             || empty($parts['host'])
+            || ($issuerParts['scheme'] ?? null) !== 'https'
+            || empty($issuerParts['host'])
+            || !hash_equals(strtolower((string) $issuerParts['host']), strtolower((string) $parts['host']))
+            || (int) ($issuerParts['port'] ?? 443) !== (int) ($parts['port'] ?? 443)
             || isset($parts['user'])
             || isset($parts['pass'])
             || isset($parts['fragment'])
         ) {
-            throw new RuntimeException('OIDC discovery endpoint is not a safe HTTPS URL');
+            throw new RuntimeException('OIDC discovery endpoint is not on the configured HTTPS origin');
         }
     }
 }
