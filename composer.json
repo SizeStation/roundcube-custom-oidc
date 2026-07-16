@@ -4,6 +4,7 @@
     "type": "project",
     "license": "AGPL-3.0-or-later",
     "require": {
+        "firebase/php-jwt": "^7.1",
         "php": ">=8.2",
         "sizestation/roundcube-credentials": "dev-main"
     },
