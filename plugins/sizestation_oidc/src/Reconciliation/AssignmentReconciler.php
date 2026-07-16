@@ -33,6 +33,7 @@ final class AssignmentReconciler
         $created = $updated = $disabled = $orphaned = 0;
         $preferredRecordId = null;
         $known = [];
+        $materialized = [];
         try {
             foreach ($assignments as $assignment) {
                 if ((int) ($assignment['principal_id'] ?? 0) !== $principalId) {
@@ -65,6 +66,11 @@ final class AssignmentReconciler
                     ++$updated;
                 }
                 $this->updateAssignment($assignmentId, $principalId, 'materialized', $recordId, $identityId);
+                $materialized[] = [
+                    'assignment_id' => $assignmentId,
+                    'record_id' => $recordId,
+                    'identity_id' => $identityId,
+                ];
                 if (!empty($assignment['is_preferred'])) {
                     $preferredRecordId = $recordId;
                 }
@@ -87,7 +93,14 @@ final class AssignmentReconciler
                 throw new RuntimeException('Unable to commit assignment reconciliation');
             }
 
-            return new ReconciliationResult($created, $updated, $disabled, $orphaned, $preferredRecordId);
+            return new ReconciliationResult(
+                $created,
+                $updated,
+                $disabled,
+                $orphaned,
+                $preferredRecordId,
+                $materialized,
+            );
         } catch (\Throwable $exception) {
             if ($manageTransaction) {
                 $this->database->rollbackTransaction();

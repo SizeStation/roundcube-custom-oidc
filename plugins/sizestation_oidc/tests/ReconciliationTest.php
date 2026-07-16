@@ -54,6 +54,7 @@ final class ReconciliationTest extends TestCase
         $first = $reconciler->reconcile($this->principalId, 10, $bound);
         self::assertSame(1, $first->created);
         self::assertNotNull($first->preferredSwitchRecordId);
+        self::assertSame('00000000-0000-4000-8000-000000000002', $first->materialized[0]['assignment_id']);
 
         $row = $this->database->pdo->query(
             'SELECT password, credential_provider, credential_reference, managed_externally'

@@ -358,6 +358,22 @@ class sizestation_oidc extends rcube_plugin
             );
         } catch (\Throwable) {
         }
+        foreach ($result->materialized as $materialized) {
+            try {
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::AssignmentMaterialized,
+                    'system',
+                    'login',
+                    $principalId,
+                    $materialized['assignment_id'],
+                    [
+                        'ident_switch_record_id' => $materialized['record_id'],
+                        'roundcube_identity_id' => $materialized['identity_id'],
+                    ],
+                );
+            } catch (\Throwable) {
+            }
+        }
         if ($result->preferredSwitchRecordId !== null) {
             $_SESSION['sizestation_oidc.preferred_switch_id'] = $result->preferredSwitchRecordId;
         }

@@ -329,6 +329,19 @@ final class Application
             $this->auditRepository()->record(AuditEvent::ReconciliationStarted, 'cli', 'administrator', $id);
             try {
                 $result = $this->reconcilePrincipal($principal);
+                foreach ($result->materialized as $materialized) {
+                    $this->auditRepository()->record(
+                        AuditEvent::AssignmentMaterialized,
+                        'cli',
+                        'administrator',
+                        $id,
+                        $materialized['assignment_id'],
+                        [
+                            'ident_switch_record_id' => $materialized['record_id'],
+                            'roundcube_identity_id' => $materialized['identity_id'],
+                        ],
+                    );
+                }
                 $this->auditRepository()->record(
                     AuditEvent::ReconciliationCompleted,
                     'cli',
