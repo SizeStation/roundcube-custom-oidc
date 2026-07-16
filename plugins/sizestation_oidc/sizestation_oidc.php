@@ -168,26 +168,53 @@ class sizestation_oidc extends rcube_plugin
         $principalId = (int) $this->loginPhase->principal['id'];
         $assignmentId = (string) $this->loginPhase->anchor['id'];
         try {
-            $this->principals()->activate($principalId, (int) $rc->user->ID);
-            $this->assignments()->markAnchorInitialized($assignmentId, $principalId);
-            $this->reconcileAfterLogin($principalId, (int) $rc->user->ID);
-            (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->establish($_SESSION, $this->loginPhase);
-            $this->audit()->record(
-                \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OidcLoginSuccess,
-                'oidc',
-                $this->loginPhase->identity->subject,
+            try {
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationStarted,
+                    'system',
+                    'login',
+                    $principalId,
+                );
+            } catch (\Throwable) {
+            }
+            $result = (new \SizeStation\Roundcube\Oidc\Service\LoginFinalizer($rc->db))->finalize(
                 $principalId,
+                (int) $rc->user->ID,
                 $assignmentId,
-                ['roundcube_user_id' => (int) $rc->user->ID],
-                $this->sourceIp(),
-                $_SERVER['HTTP_USER_AGENT'] ?? null,
+                $this->loginPhase->assignments,
             );
+            $this->recordReconciliationCompleted($principalId, $result);
+            (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->establish($_SESSION, $this->loginPhase);
+            try {
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OidcLoginSuccess,
+                    'oidc',
+                    $this->loginPhase->identity->subject,
+                    $principalId,
+                    $assignmentId,
+                    ['roundcube_user_id' => (int) $rc->user->ID],
+                    $this->sourceIp(),
+                    $_SERVER['HTTP_USER_AGENT'] ?? null,
+                );
+            } catch (\Throwable) {
+            }
             $this->loginPhase = null;
 
             return ['_task' => 'mail', '_mbox' => 'INBOX'];
         } catch (\Throwable $exception) {
             (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->clear($_SESSION);
             unset($_SESSION['sizestation_oidc.preferred_switch_id']);
+            try {
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationFailed,
+                    'system',
+                    'login',
+                    $principalId,
+                    $assignmentId,
+                    ['error_code' => 'login_finalization_rolled_back'],
+                );
+            } catch (\Throwable) {
+            }
             $this->failSafely('oidc_login_finalize_failed', $exception, false);
             $this->loginPhase = null;
             $rc->kill_session();
@@ -269,21 +296,12 @@ class sizestation_oidc extends rcube_plugin
         $session->clear($_SESSION);
     }
 
-    private function reconcileAfterLogin(int $principalId, int $roundcubeUserId): void
+    private function recordReconciliationCompleted(
+        int $principalId,
+        \SizeStation\Roundcube\Oidc\Reconciliation\ReconciliationResult $result,
+    ): void
     {
-        if ($this->loginPhase === null) {
-            return;
-        }
         try {
-            $this->audit()->record(
-                \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationStarted,
-                'system',
-                'login',
-                $principalId,
-            );
-            $result = (new \SizeStation\Roundcube\Oidc\Reconciliation\AssignmentReconciler(
-                rcmail::get_instance()->db,
-            ))->reconcile($principalId, $roundcubeUserId, $this->loginPhase->assignments);
             $this->audit()->record(
                 \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationCompleted,
                 'system',
@@ -296,21 +314,10 @@ class sizestation_oidc extends rcube_plugin
                     'orphaned' => $result->orphaned,
                 ],
             );
-            if ($result->preferredSwitchRecordId !== null) {
-                $_SESSION['sizestation_oidc.preferred_switch_id'] = $result->preferredSwitchRecordId;
-            }
-        } catch (\Throwable $exception) {
-            try {
-                $this->audit()->record(
-                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationFailed,
-                    'system',
-                    'login',
-                    $principalId,
-                    metadata: ['error_code' => 'reconciliation_failed'],
-                );
-            } catch (\Throwable) {
-            }
-            throw new \RuntimeException('Assignment reconciliation failed', 0, $exception);
+        } catch (\Throwable) {
+        }
+        if ($result->preferredSwitchRecordId !== null) {
+            $_SESSION['sizestation_oidc.preferred_switch_id'] = $result->preferredSwitchRecordId;
         }
     }
 

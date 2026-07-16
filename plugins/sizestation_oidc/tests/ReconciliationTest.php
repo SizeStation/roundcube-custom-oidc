@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use SizeStation\Roundcube\Oidc\Reconciliation\AssignmentReconciler;
 use SizeStation\Roundcube\Oidc\Repository\AssignmentRepository;
 use SizeStation\Roundcube\Oidc\Repository\PrincipalRepository;
+use SizeStation\Roundcube\Oidc\Service\LoginFinalizer;
 
 #[RequiresPhpExtension('pdo_sqlite')]
 final class ReconciliationTest extends TestCase
@@ -117,6 +118,41 @@ final class ReconciliationTest extends TestCase
         self::assertSame(1, $result->disabled);
         self::assertSame(0, (int) $this->database->pdo->query('SELECT flags FROM ident_switch')->fetchColumn());
         self::assertSame(1, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
+    }
+
+    public function testLoginFinalizationRollsBackPrincipalAnchorAndMaterializationTogether(): void
+    {
+        $repository = new AssignmentRepository($this->database);
+        $bound = $repository->bindPending($this->principalId, 'https://issuer.example', 'external-1');
+        $bound[1]['principal_id'] = 999;
+
+        try {
+            (new LoginFinalizer($this->database))->finalize(
+                $this->principalId,
+                10,
+                '00000000-0000-4000-8000-000000000001',
+                $bound,
+            );
+            self::fail('A changed assignment owner must abort login finalization');
+        } catch (\RuntimeException $exception) {
+            self::assertSame('Assignment ownership changed during reconciliation', $exception->getMessage());
+        }
+
+        $principal = $this->database->pdo->query(
+            'SELECT status, roundcube_user_id, first_login_at FROM sizestation_oidc_principals',
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame('pending', $principal['status']);
+        self::assertNull($principal['roundcube_user_id']);
+        self::assertNull($principal['first_login_at']);
+
+        $anchor = $this->database->pdo->query(
+            "SELECT materialization_status, credential_status FROM sizestation_mailbox_assignments"
+            . " WHERE id = '00000000-0000-4000-8000-000000000001'",
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame('pending', $anchor['materialization_status']);
+        self::assertSame('unknown', $anchor['credential_status']);
+        self::assertSame(0, (int) $this->database->pdo->query('SELECT COUNT(*) FROM ident_switch')->fetchColumn());
+        self::assertSame(0, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
     }
 
     private function insertAssignment(string $id, string $mailbox, bool $anchor, bool $preferred): void

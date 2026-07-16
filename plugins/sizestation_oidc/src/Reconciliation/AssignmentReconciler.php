@@ -19,10 +19,15 @@ final class AssignmentReconciler
     }
 
     /** @param list<array<string, mixed>> $assignments */
-    public function reconcile(int $principalId, int $roundcubeUserId, array $assignments): ReconciliationResult
+    public function reconcile(
+        int $principalId,
+        int $roundcubeUserId,
+        array $assignments,
+        bool $manageTransaction = true,
+    ): ReconciliationResult
     {
         $this->validator->validateForLogin($assignments);
-        if (!$this->database->startTransaction()) {
+        if ($manageTransaction && !$this->database->startTransaction()) {
             throw new RuntimeException('Unable to start assignment reconciliation');
         }
 
@@ -79,13 +84,15 @@ final class AssignmentReconciler
                 }
             }
 
-            if (!$this->database->endTransaction()) {
+            if ($manageTransaction && !$this->database->endTransaction()) {
                 throw new RuntimeException('Unable to commit assignment reconciliation');
             }
 
             return new ReconciliationResult($created, $updated, $disabled, $orphaned, $preferredRecordId);
         } catch (\Throwable $exception) {
-            $this->database->rollbackTransaction();
+            if ($manageTransaction) {
+                $this->database->rollbackTransaction();
+            }
             throw $exception;
         }
     }
