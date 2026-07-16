@@ -90,6 +90,66 @@ final class IdTokenValidatorTest extends TestCase
         );
     }
 
+    public function testRejectsExpiredToken(): void
+    {
+        $now = time();
+        $this->expectException(RuntimeException::class);
+        $this->validator()->validate(
+            $this->token(['exp' => $now - 61], $now),
+            $this->jwks,
+            'expected-nonce',
+            $now,
+        );
+    }
+
+    public function testRejectsMissingNonce(): void
+    {
+        $now = time();
+        $this->expectException(RuntimeException::class);
+        $this->validator()->validate(
+            $this->token(['nonce' => null], $now),
+            $this->jwks,
+            'expected-nonce',
+            $now,
+        );
+    }
+
+    public function testRejectsMultipleAudiencesWithoutAuthorizedParty(): void
+    {
+        $now = time();
+        $this->expectException(RuntimeException::class);
+        $this->validator()->validate(
+            $this->token(['aud' => ['roundcube-client', 'other-client']], $now),
+            $this->jwks,
+            'expected-nonce',
+            $now,
+        );
+    }
+
+    public function testRejectsInvalidSignature(): void
+    {
+        $now = time();
+        $otherKey = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($otherKey, $otherPrivateKey);
+        $claims = [
+            'iss' => 'https://issuer.example/application/o/roundcube/',
+            'sub' => 'subject-1',
+            'aud' => 'roundcube-client',
+            'exp' => $now + 300,
+            'iat' => $now,
+            'nonce' => 'expected-nonce',
+            'sizestation_user_id' => 'external-1',
+        ];
+
+        $this->expectException(RuntimeException::class);
+        $this->validator()->validate(
+            JWT::encode($claims, $otherPrivateKey, 'RS256', 'test-key'),
+            $this->jwks,
+            'expected-nonce',
+            $now,
+        );
+    }
+
     /** @param list<string> $groups */
     private function validator(array $groups = []): IdTokenValidator
     {

@@ -483,6 +483,22 @@ class sizestation_oidc extends rcube_plugin
     private function failSafely(string $code, \Throwable $exception, bool $show = true): void
     {
         $correlation = bin2hex(random_bytes(8));
+        $identity = (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->identity($_SESSION);
+        $principalId = is_array($identity) ? (int) ($identity['principal_id'] ?? 0) : 0;
+        try {
+            $this->audit()->record(
+                \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OidcLoginFailure,
+                'system',
+                'roundcube',
+                $principalId > 0 ? $principalId : null,
+                metadata: ['error_code' => $code, 'correlation_id' => $correlation],
+                sourceIp: $this->sourceIp(),
+                userAgent: is_string($_SERVER['HTTP_USER_AGENT'] ?? null)
+                    ? $_SERVER['HTTP_USER_AGENT']
+                    : null,
+            );
+        } catch (\Throwable) {
+        }
         rcmail::get_instance()->write_log(
             'sizestation_oidc',
             "event=oidc_failure code={$code} correlation_id={$correlation} exception=" . get_class($exception),
