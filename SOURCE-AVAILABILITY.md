@@ -1,5 +1,9 @@
 # Corresponding source publication
 
+The login page links to the public source repository through the
+`sizestation_oidc.source_url` setting. For a production release, point this at
+the immutable tag or commit corresponding exactly to the deployed image digest.
+
 For every production image:
 
 1. tag the tested Git commit (for example `roundcube-oidc-2026.07.16.1`);

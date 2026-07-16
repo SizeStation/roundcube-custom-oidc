@@ -117,6 +117,17 @@ class sizestation_oidc extends rcube_plugin
             'class' => 'button mainaction',
         ], rcube::Q($this->gettext('loginwithauthentik')));
         $form['buttons']['sizestation_oidc'] = ['outterclass' => 'sizestation-oidc-login', 'content' => $button];
+        $sourceUrl = (string) $rc->config->get('sizestation_oidc.source_url', '');
+        if (filter_var($sourceUrl, FILTER_VALIDATE_URL) && str_starts_with($sourceUrl, 'https://')) {
+            $form['buttons']['sizestation_oidc_source'] = [
+                'outterclass' => 'sizestation-oidc-source',
+                'content' => html::a([
+                    'href' => $sourceUrl,
+                    'rel' => 'noopener noreferrer',
+                    'target' => '_blank',
+                ], rcube::Q($this->gettext('sourcecode'))),
+            ];
+        }
 
         return $form;
     }
