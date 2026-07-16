@@ -45,6 +45,7 @@ CREATE TABLE sizestation_mailbox_assignments (
     last_used_at varchar(32),
     last_error_code varchar(64),
     UNIQUE(issuer, external_user_id, mailbox_address),
+    UNIQUE(credential_provider, credential_reference),
     UNIQUE(principal_id, mailbox_address),
     UNIQUE(issuer, external_user_id, anchor_guard),
     UNIQUE(issuer, external_user_id, preferred_guard),
@@ -89,4 +90,4 @@ CREATE TABLE sizestation_oidc_rate_limits (
     expires_at varchar(32) NOT NULL
 );
 
-INSERT INTO system (name, value) VALUES ('sizestation_oidc-version', '2026071601');
+INSERT INTO system (name, value) VALUES ('sizestation_oidc-version', '2026071602');

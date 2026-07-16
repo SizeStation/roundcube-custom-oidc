@@ -160,4 +160,26 @@ final class AssignmentRepository
             throw new RepositoryException('Unable to update anchor credential status');
         }
     }
+
+    public function recordCredentialAvailabilityFailure(
+        string $assignmentId,
+        int $principalId,
+        string $errorCode,
+    ): void {
+        $query = $this->database->query(
+            'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' SET last_validated_at = ?, last_error_code = ?, updated_at = ?'
+            . ' WHERE id = ? AND principal_id = ? AND enabled = ? AND is_anchor = ?',
+            gmdate('Y-m-d\TH:i:s\Z'),
+            substr($errorCode, 0, 64),
+            gmdate('Y-m-d\TH:i:s\Z'),
+            $assignmentId,
+            $principalId,
+            1,
+            1,
+        );
+        if (!$query || $this->database->affected_rows($query) !== 1) {
+            throw new RepositoryException('Unable to record anchor credential availability failure');
+        }
+    }
 }

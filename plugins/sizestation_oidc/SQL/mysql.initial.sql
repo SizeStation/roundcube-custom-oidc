@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS `sizestation_mailbox_assignments` (
     `last_error_code` varchar(64),
     PRIMARY KEY (`id`),
     UNIQUE KEY `sizestation_assignment_external_mailbox` (`issuer`, `external_user_id`, `mailbox_address`),
+    UNIQUE KEY `sizestation_assignment_credential_reference` (`credential_provider`, `credential_reference`),
     UNIQUE KEY `sizestation_assignment_principal_mailbox` (`principal_id`, `mailbox_address`),
     UNIQUE KEY `sizestation_assignment_anchor` (`issuer`, `external_user_id`, `anchor_guard`),
     UNIQUE KEY `sizestation_assignment_preferred` (`issuer`, `external_user_id`, `preferred_guard`),
@@ -99,4 +100,4 @@ CREATE TABLE `sizestation_oidc_rate_limits` (
     CHECK (`attempts` > 0)
 ) ROW_FORMAT=DYNAMIC ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-INSERT INTO `system` (`name`, `value`) VALUES ('sizestation_oidc-version', '2026071601');
+INSERT INTO `system` (`name`, `value`) VALUES ('sizestation_oidc-version', '2026071602');

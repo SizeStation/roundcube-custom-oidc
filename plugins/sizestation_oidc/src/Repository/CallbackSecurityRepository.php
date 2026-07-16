@@ -22,6 +22,20 @@ final class CallbackSecurityRepository
             throw new RepositoryException('Unable to start callback rate-limit transaction');
         }
         try {
+            $updated = $this->database->query(
+                'UPDATE ' . $this->database->table_name('sizestation_oidc_rate_limits')
+                . ' SET attempts = attempts + 1 WHERE limiter_key = ? AND expires_at >= ? AND attempts < ?',
+                $key,
+                $this->timestamp($now),
+                $maximumAttempts,
+            );
+            if ($updated && $this->database->affected_rows($updated) === 1) {
+                if (!$this->database->endTransaction()) {
+                    throw new RepositoryException('Unable to commit callback rate limit');
+                }
+
+                return;
+            }
             $query = $this->database->query(
                 'SELECT attempts, expires_at FROM ' . $this->database->table_name('sizestation_oidc_rate_limits')
                 . ' WHERE limiter_key = ?',
@@ -29,33 +43,28 @@ final class CallbackSecurityRepository
             );
             $row = $this->database->fetch_assoc($query);
             if (is_array($row) && strtotime((string) $row['expires_at']) >= $now) {
-                $attempts = (int) $row['attempts'] + 1;
-                if ($attempts > $maximumAttempts) {
+                if ((int) $row['attempts'] >= $maximumAttempts) {
                     throw new RuntimeException('OIDC callback rate limit exceeded');
                 }
-                $updated = $this->database->query(
-                    'UPDATE ' . $this->database->table_name('sizestation_oidc_rate_limits')
-                    . ' SET attempts = ? WHERE limiter_key = ?',
-                    $attempts,
-                    $key,
-                );
-            } else {
-                if (is_array($row)) {
-                    $this->database->query(
-                        'DELETE FROM ' . $this->database->table_name('sizestation_oidc_rate_limits')
-                        . ' WHERE limiter_key = ?',
-                        $key,
-                    );
-                }
-                $updated = $this->database->query(
-                    'INSERT INTO ' . $this->database->table_name('sizestation_oidc_rate_limits')
-                    . ' (limiter_key, window_started_at, attempts, expires_at) VALUES (?, ?, ?, ?)',
+
+                throw new RepositoryException('Callback rate limit changed concurrently');
+            }
+            if (is_array($row)) {
+                $this->database->query(
+                    'DELETE FROM ' . $this->database->table_name('sizestation_oidc_rate_limits')
+                    . ' WHERE limiter_key = ? AND expires_at < ?',
                     $key,
                     $this->timestamp($now),
-                    1,
-                    $this->timestamp($now + $windowSeconds),
                 );
             }
+            $updated = $this->database->query(
+                'INSERT INTO ' . $this->database->table_name('sizestation_oidc_rate_limits')
+                . ' (limiter_key, window_started_at, attempts, expires_at) VALUES (?, ?, ?, ?)',
+                $key,
+                $this->timestamp($now),
+                1,
+                $this->timestamp($now + $windowSeconds),
+            );
             if (!$updated || !$this->database->endTransaction()) {
                 throw new RepositoryException('Unable to persist callback rate limit');
             }

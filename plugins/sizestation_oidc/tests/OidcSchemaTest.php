@@ -54,6 +54,39 @@ final class OidcSchemaTest extends TestCase
         );
     }
 
+    public function testDatabaseRejectsCredentialReferenceReuse(): void
+    {
+        $database = $this->database();
+        $this->insertAssignment($database, '00000000-0000-4000-8000-000000000001', 'one@example.test');
+
+        $this->expectException(\PDOException::class);
+        $statement = $database->prepare(
+            'INSERT INTO sizestation_mailbox_assignments ('
+            . 'id, issuer, external_user_id, mailbox_address, credential_provider, credential_reference,'
+            . ' is_anchor, is_preferred, enabled, anchor_guard, created_by, created_at, updated_at'
+            . ') VALUES (?, ?, ?, ?, ?, ?, 1, 0, 1, ?, ?, ?, ?)',
+        );
+        $statement->execute([
+            '00000000-0000-4000-8000-000000000002',
+            'https://issuer.example',
+            'external-2',
+            'two@example.test',
+            'openbao',
+            'assignment/00000000-0000-4000-8000-000000000001',
+            'anchor',
+            'test',
+            'now',
+            'now',
+        ]);
+    }
+
+    public function testFreshSchemaRecordsLatestVersion(): void
+    {
+        self::assertSame('2026071602', $this->database()->query(
+            "SELECT value FROM system WHERE name = 'sizestation_oidc-version'",
+        )->fetchColumn());
+    }
+
     private function database(): PDO
     {
         $database = new PDO('sqlite::memory:');

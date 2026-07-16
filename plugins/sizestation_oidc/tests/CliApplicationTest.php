@@ -8,6 +8,8 @@ use PDO;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use SizeStation\Roundcube\Credentials\AccountCredentials;
+use SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind;
+use SizeStation\Roundcube\Credentials\Exception\ExternalCredentialException;
 use SizeStation\Roundcube\Oidc\Cli\Application;
 
 #[RequiresPhpExtension('pdo_sqlite')]
@@ -113,7 +115,7 @@ final class CliApplicationTest extends TestCase
         self::assertSame([], $this->provisioner->writes);
     }
 
-    public function testProvisioningFailureDeletesSecretAndRollsBackAssignment(): void
+    public function testAmbiguousProvisioningFailureDoesNotDeletePossiblyPreexistingSecret(): void
     {
         $this->provisioner->throwAfterWrite = true;
         [$exit, $stdout, $stderr] = $this->runApplication([
@@ -131,10 +133,74 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, $exit);
         self::assertSame('', $stdout);
         self::assertStringContainsString('operation_rejected', $stderr);
-        self::assertSame(['mailboxes/anchor'], $this->provisioner->deletes);
+        self::assertSame([], $this->provisioner->deletes);
         self::assertSame(0, (int) $this->database->pdo->query(
             'SELECT COUNT(*) FROM sizestation_mailbox_assignments',
         )->fetchColumn());
+    }
+
+    public function testDatabaseFailureAfterSecretCreationDeletesTheNewSecret(): void
+    {
+        [$firstExit] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor',
+            '--anchor',
+            '--password-stdin',
+            '--json',
+        ], "first-secret\n");
+        [$secondExit, , $secondError] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/new-orphan',
+            '--password-stdin',
+            '--json',
+        ], "second-secret\n");
+
+        self::assertSame(0, $firstExit);
+        self::assertSame(1, $secondExit);
+        self::assertStringContainsString('operation_rejected', $secondError);
+        self::assertContains('mailboxes/new-orphan', $this->provisioner->deletes);
+        self::assertSame(1, (int) $this->database->pdo->query(
+            'SELECT COUNT(*) FROM sizestation_mailbox_assignments',
+        )->fetchColumn());
+    }
+
+    public function testCreateOnlyProvisioningCannotOverwriteAnAssignedCredentialReference(): void
+    {
+        [$firstExit] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/shared',
+            '--anchor',
+            '--password-stdin',
+            '--json',
+        ], "first-secret\n");
+        [$secondExit] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-2',
+            '--mailbox=other@example.test',
+            '--credential-reference=mailboxes/shared',
+            '--anchor',
+            '--password-stdin',
+            '--json',
+        ], "must-not-overwrite\n");
+
+        self::assertSame(0, $firstExit);
+        self::assertSame(1, $secondExit);
+        self::assertSame('first-secret', $this->provisioner->writes['mailboxes/shared']['password']);
+        self::assertSame([], $this->provisioner->deletes);
     }
 
     public function testAdministrativeAssignmentLifecycleIsAuditedAndSecretSafe(): void
@@ -270,10 +336,46 @@ final class CliApplicationTest extends TestCase
         )->fetchColumn());
     }
 
+    public function testTransientOpenBaoValidationFailurePreservesLastKnownValidStatus(): void
+    {
+        [, $output] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor',
+            '--anchor',
+            '--password-stdin',
+            '--json',
+        ], "anchor-secret\n");
+        $assignmentId = (string) json_decode($output, true, flags: JSON_THROW_ON_ERROR)['assignment_id'];
+
+        [$exit] = $this->runApplication([
+            'sizestation-oidc',
+            'validate',
+            '--assignment-id=' . $assignmentId,
+            '--json',
+        ], '', static function (): AccountCredentials {
+            throw new ExternalCredentialException('openbao_unavailable', CredentialFailureKind::Unavailable);
+        });
+
+        self::assertSame(1, $exit);
+        $assignment = $this->database->pdo->query(
+            "SELECT credential_status, last_error_code FROM sizestation_mailbox_assignments"
+            . " WHERE id = '{$assignmentId}'",
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame('valid', $assignment['credential_status']);
+        self::assertSame('openbao_unavailable', $assignment['last_error_code']);
+        self::assertSame('openbao_unavailable', $this->database->pdo->query(
+            'SELECT event_type FROM sizestation_oidc_audit_log ORDER BY id DESC LIMIT 1',
+        )->fetchColumn());
+    }
+
     /** @param list<string> $arguments
      *  @return array{int, string, string}
      */
-    private function runApplication(array $arguments, string $input): array
+    private function runApplication(array $arguments, string $input, ?callable $resolver = null): array
     {
         $stdin = fopen('php://memory', 'r+');
         fwrite($stdin, $input);
@@ -282,7 +384,7 @@ final class CliApplicationTest extends TestCase
         $application = new Application(
             $this->database,
             $this->provisioner,
-            static fn (array $assignment): AccountCredentials => new AccountCredentials(
+            $resolver ?? static fn (array $assignment): AccountCredentials => new AccountCredentials(
                 (string) $assignment['mailbox_address'],
                 'resolved-secret',
             ),

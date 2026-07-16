@@ -24,8 +24,12 @@ final class AdminRepository
         bool $anchor,
         bool $preferred,
         string $actor,
+        string $credentialStatus = 'unknown',
     ): array {
         $mailbox = (string) new MailboxAddress($mailbox);
+        if (!in_array($credentialStatus, ['unknown', 'valid'], true)) {
+            throw new RuntimeException('Initial credential status is invalid');
+        }
         if ($issuer === '' || strlen($issuer) > 255 || $externalUserId === '' || strlen($externalUserId) > 255) {
             throw new RuntimeException('Issuer or external user identifier is invalid');
         }
@@ -35,7 +39,8 @@ final class AdminRepository
             'INSERT INTO ' . $this->database->table_name('sizestation_mailbox_assignments')
             . ' (id, issuer, external_user_id, mailbox_address, display_label, credential_provider,'
             . ' credential_reference, is_anchor, is_preferred, enabled, anchor_guard, preferred_guard,'
-            . ' created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            . ' credential_status, created_by, created_at, updated_at)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             $id,
             $issuer,
             $externalUserId,
@@ -48,6 +53,7 @@ final class AdminRepository
             1,
             $anchor ? 'anchor' : null,
             $preferred ? 'preferred' : null,
+            $credentialStatus,
             $actor,
             $now,
             $now,
@@ -88,6 +94,21 @@ final class AdminRepository
         );
         if (!$query || $this->database->affected_rows($query) !== 1) {
             throw new RepositoryException('Unable to update credential status');
+        }
+    }
+
+    public function recordCredentialAvailabilityFailure(string $assignmentId, string $errorCode): void
+    {
+        $query = $this->database->query(
+            'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' SET last_validated_at = ?, last_error_code = ?, updated_at = ? WHERE id = ?',
+            gmdate('Y-m-d\TH:i:s\Z'),
+            substr($errorCode, 0, 64),
+            gmdate('Y-m-d\TH:i:s\Z'),
+            $assignmentId,
+        );
+        if (!$query || $this->database->affected_rows($query) !== 1) {
+            throw new RepositoryException('Unable to record credential availability failure');
         }
     }
 

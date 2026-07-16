@@ -177,12 +177,20 @@ class sizestation_oidc extends rcube_plugin
             }
             $this->anchorFailureStatus = $status;
             try {
-                $this->assignments()->markCredentialFailure(
-                    (string) $this->loginPhase->anchor['id'],
-                    (int) $this->loginPhase->principal['id'],
-                    $status,
-                    $errorCode,
-                );
+                if ($status === 'unavailable') {
+                    $this->assignments()->recordCredentialAvailabilityFailure(
+                        (string) $this->loginPhase->anchor['id'],
+                        (int) $this->loginPhase->principal['id'],
+                        $errorCode,
+                    );
+                } else {
+                    $this->assignments()->markCredentialFailure(
+                        (string) $this->loginPhase->anchor['id'],
+                        (int) $this->loginPhase->principal['id'],
+                        $status,
+                        $errorCode,
+                    );
+                }
                 $this->audit()->record(
                     $status === 'unavailable'
                         ? \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OpenBaoUnavailable

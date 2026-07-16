@@ -93,26 +93,25 @@ final class Application
                 return ['ok' => true, 'dry_run' => true, 'command' => 'provision', 'mailbox' => $mailbox];
             }
 
+            $this->provisioner->create($reference, ['username' => $username, 'password' => $password]);
             $repository = new AdminRepository($this->database);
-            $assignment = $repository->createAssignment(
-                $issuer,
-                $externalId,
-                $mailbox,
-                $reference->value,
-                is_string($options['label'] ?? null) ? $options['label'] : null,
-                $anchor,
-                $preferred,
-                'cli',
-            );
             try {
-                $this->provisioner->write($reference, ['username' => $username, 'password' => $password]);
-                $repository->markCredentialStatus((string) $assignment['id'], 'valid');
+                $assignment = $repository->createAssignment(
+                    $issuer,
+                    $externalId,
+                    $mailbox,
+                    $reference->value,
+                    is_string($options['label'] ?? null) ? $options['label'] : null,
+                    $anchor,
+                    $preferred,
+                    'cli',
+                    'valid',
+                );
             } catch (\Throwable $exception) {
                 try {
                     $this->provisioner->delete($reference);
                 } catch (\Throwable) {
                 }
-                $repository->deleteAssignmentForRollback((string) $assignment['id']);
                 throw $exception;
             }
             $this->auditRepository()->record(
@@ -189,16 +188,18 @@ final class Application
             $event = AuditEvent::CredentialValidationSuccess;
             $status = 'valid';
         } catch (\Throwable $exception) {
-            $status = $exception instanceof ExternalCredentialException
-                && $exception->kind !== \SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind::Invalid
-                    ? 'unavailable'
-                    : 'invalid';
             $errorCode = $exception instanceof ExternalCredentialException
                 ? $exception->errorCode
                 : 'credential_validation_failed';
-            $repository->markCredentialStatus((string) $assignment['id'], $status, $errorCode);
+            $unavailable = $exception instanceof ExternalCredentialException
+                && $exception->kind !== \SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind::Invalid;
+            if ($unavailable) {
+                $repository->recordCredentialAvailabilityFailure((string) $assignment['id'], $errorCode);
+            } else {
+                $repository->markCredentialStatus((string) $assignment['id'], 'invalid', $errorCode);
+            }
             $this->auditRepository()->record(
-                AuditEvent::CredentialValidationFailure,
+                $unavailable ? AuditEvent::OpenBaoUnavailable : AuditEvent::CredentialValidationFailure,
                 'cli',
                 'administrator',
                 $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],

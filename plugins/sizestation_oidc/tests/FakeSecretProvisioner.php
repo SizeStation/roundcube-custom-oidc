@@ -15,6 +15,14 @@ final class FakeSecretProvisioner implements SecretProvisionerInterface
     public array $deletes = [];
     public bool $throwAfterWrite = false;
 
+    public function create(CredentialReference $reference, array $secret): void
+    {
+        if (isset($this->writes[$reference->value])) {
+            throw new \RuntimeException('simulated create-only conflict');
+        }
+        $this->write($reference, $secret);
+    }
+
     public function write(CredentialReference $reference, array $secret): void
     {
         $this->writes[$reference->value] = $secret;

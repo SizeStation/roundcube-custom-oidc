@@ -9,6 +9,9 @@ use SizeStation\Roundcube\Credentials\OpenBao\CredentialReference;
 interface SecretProvisionerInterface
 {
     /** @param array<string, string> $secret */
+    public function create(CredentialReference $reference, array $secret): void;
+
+    /** @param array<string, string> $secret */
     public function write(CredentialReference $reference, array $secret): void;
 
     public function delete(CredentialReference $reference): void;

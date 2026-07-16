@@ -17,7 +17,18 @@ final class OpenBaoKvV2Provisioner implements SecretProvisionerInterface
     ) {
     }
 
+    public function create(CredentialReference $reference, array $secret): void
+    {
+        $this->writeSecret($reference, $secret, true);
+    }
+
     public function write(CredentialReference $reference, array $secret): void
+    {
+        $this->writeSecret($reference, $secret, false);
+    }
+
+    /** @param array<string, string> $secret */
+    private function writeSecret(CredentialReference $reference, array $secret, bool $createOnly): void
     {
         if (
             !isset($secret['username'], $secret['password'])
@@ -27,7 +38,11 @@ final class OpenBaoKvV2Provisioner implements SecretProvisionerInterface
             throw new RuntimeException('Provisioned mailbox credentials are incomplete');
         }
         try {
-            $body = json_encode(['data' => $secret], JSON_THROW_ON_ERROR);
+            $payload = ['data' => $secret];
+            if ($createOnly) {
+                $payload['options'] = ['cas' => 0];
+            }
+            $body = json_encode($payload, JSON_THROW_ON_ERROR);
         } catch (JsonException $exception) {
             throw new RuntimeException('Unable to encode the mailbox secret', 0, $exception);
         }
