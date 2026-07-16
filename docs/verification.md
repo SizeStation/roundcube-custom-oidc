@@ -1,17 +1,18 @@
 # Verification report
 
-Verified on 2026-07-16 through Git commit `719a864` and the pinned Roundcube
+Verified on 2026-07-16 through Git commit `61d12c5` and the pinned Roundcube
 1.7.2 / PHP 8.4.23 base. Production remained untouched.
 
 ## Automated and build evidence
 
-- PHPUnit: **81 tests, 180 assertions**, all passing.
-- PHPCS: **79 files**, all passing.
+- PHPUnit: **111 tests, 319 assertions**, all passing from a fresh clone of the
+  pushed commit.
+- PHPCS: **84 files**, all passing.
 - Fresh SQLite plugin migrations: both initializers reported `[OK]` on a
   disposable named volume using the documented entrypoint commands.
 - Fresh PostgreSQL 16 and MariaDB 11 schemas: both plugin schemas applied to
   isolated containers and recorded `ident_switch-version=2026071600` and
-  `sizestation_oidc-version=2026071601`.
+  `sizestation_oidc-version=2026071602`.
 - Custom image built successfully with both base images pinned by digest,
   Elastic2022 pinned by commit and archive checksum, production Composer
   dependencies installed at build time, licences included, OIDC autoload
@@ -20,6 +21,9 @@ Verified on 2026-07-16 through Git commit `719a864` and the pinned Roundcube
   `sha256:f361f196a62c97c437379d2d9f4866a54c6ebde10b5d81828313d31a222d58b5`.
   This is not a registry digest and must not be placed in the production stack.
 - CLI help completed through the real Roundcube Docker entrypoint.
+- The final `61d12c5` image rebuilt successfully, passed PHP syntax and CLI
+  smoke checks, and initialized both plugin schemas on a fresh disposable
+  SQLite volume.
 - `docker stack config` rendered the supplied Swarm file successfully with the
   intended runtime secret paths and config sources.
 - OpenBao Agent HCL started as UID/GID 33 on the protected tmpfs, created its
@@ -43,6 +47,14 @@ dedicated no-mailbox-assigned behavior; persistent sanitized anchor credential
 failure states; OpenBao/materialization audit events; and a visible
 corresponding-source link. These checks used only disposable containers and
 volumes on the server.
+
+The final requirements re-audit also added create-with-existing-secret support,
+canonical CLI command/output names, immediate post-login assignment binding and
+materialization, transactional fail-closed disable/remove behavior, automatic
+return from a disabled active secondary mailbox, correct transient mailbox
+validation classification during reconciliation, same-origin OIDC discovery
+endpoints, a no-preference mailbox chooser that delegates to `ident_switch`,
+and Swarm co-location for the Agent's node-local secret tmpfs.
 
 The final production end-to-end acceptance run is deliberately pending external
 configuration. The Authentik discovery URL

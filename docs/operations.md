@@ -6,7 +6,7 @@ runtime CA/token for reads, and a separate short-lived provisioning token at
 service or shell history. All examples pipe passwords on standard input; prefer
 an interactive hidden prompt or secret manager rather than `printf` in real use.
 
-Set `IMAGE` to the deployed immutable digest. Use `--dry-run --json` first for
+Set `IMAGE` to the deployed immutable digest. Use `--dry-run --format json` first for
 every mutation.
 
 On the single Swarm manager, invoke the CLI in a one-shot container. First
@@ -51,6 +51,22 @@ Add a secondary mailbox with a unique reference and omit `--anchor`. Add
 validates IMAP and SMTP by default, writes OpenBao, creates the assignment, and
 never prints the password.
 
+To reference a credential already created through the separate provisioning
+identity, omit `--password-stdin`. The CLI reads and validates the existing
+secret but never rewrites or deletes it:
+
+```sh
+/var/www/html/bin/sizestation-oidc assignment:create \
+  --issuer https://auth.sizestation.cloud/application/o/roundcube/ \
+  --external-user-id AUTHENTIK_UUID \
+  --mailbox admin@sizestation.com \
+  --credential-reference OPAQUE_RANDOM_REFERENCE \
+  --format json
+```
+
+For an initialized principal, newly created assignments bind and reconcile
+immediately; another OIDC login is not required.
+
 ## Rotate and validate
 
 ```sh
@@ -83,9 +99,9 @@ procedure.
 ## Reconcile and audit
 
 ```sh
-/var/www/html/bin/sizestation-oidc reconcile --principal-id ID --json
-/var/www/html/bin/sizestation-oidc reconcile --json
-/var/www/html/bin/sizestation-oidc audit --principal-id ID --limit 100 --json
+/var/www/html/bin/sizestation-oidc reconcile:user --principal-id ID --format json
+/var/www/html/bin/sizestation-oidc reconcile:all --format json
+/var/www/html/bin/sizestation-oidc audit:list --principal-id ID --limit 100 --format json
 ```
 
 Reconciliation is idempotent. It repairs missing managed identities and switch
