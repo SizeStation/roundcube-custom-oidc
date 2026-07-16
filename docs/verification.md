@@ -1,12 +1,12 @@
 # Verification report
 
-Verified on 2026-07-16 against Git commit `e6f73c4` and the pinned Roundcube
+Verified on 2026-07-16 through Git commit `719a864` and the pinned Roundcube
 1.7.2 / PHP 8.4.23 base. Production remained untouched.
 
 ## Automated and build evidence
 
-- PHPUnit: **74 tests, 161 assertions**, all passing.
-- PHPCS: **77 files**, all passing.
+- PHPUnit: **81 tests, 180 assertions**, all passing.
+- PHPCS: **79 files**, all passing.
 - Fresh SQLite plugin migrations: both initializers reported `[OK]` on a
   disposable named volume using the documented entrypoint commands.
 - Fresh PostgreSQL 16 and MariaDB 11 schemas: both plugin schemas applied to
@@ -17,7 +17,7 @@ Verified on 2026-07-16 against Git commit `e6f73c4` and the pinned Roundcube
   dependencies installed at build time, licences included, OIDC autoload
   asserted, and CLI syntax asserted.
 - Local verification image manifest-list digest:
-  `sha256:2f1faf94e7384e8978a1bd591e892a4d8cf159076fa2bf8ed832dd95d2984690`.
+  `sha256:f361f196a62c97c437379d2d9f4866a54c6ebde10b5d81828313d31a222d58b5`.
   This is not a registry digest and must not be placed in the production stack.
 - CLI help completed through the real Roundcube Docker entrypoint.
 - `docker stack config` rendered the supplied Swarm file successfully with the
@@ -35,6 +35,14 @@ providers, all identified managed credential paths, managed UI enforcement,
 OIDC anchor login/logout, portable schemas, reconciliation/preferred switching,
 administrative CLI, pinned image, Agent/policies/Swarm, operations, rollback,
 licensing, architecture, and upstream-diff documentation.
+
+The final gap pass additionally verified disabled-account rejection in crafted
+switch, SMTP, Sieve, alias-parent, and credential-lookup paths; atomic rollback
+of principal activation, anchor initialization, and account materialization;
+dedicated no-mailbox-assigned behavior; persistent sanitized anchor credential
+failure states; OpenBao/materialization audit events; and a visible
+corresponding-source link. These checks used only disposable containers and
+volumes on the server.
 
 The final production end-to-end acceptance run is deliberately pending external
 configuration. The Authentik discovery URL
