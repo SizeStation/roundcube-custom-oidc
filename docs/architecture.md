@@ -10,8 +10,9 @@ Status: phase 1 design baseline, 2026-07-16.
 - Live database: SQLite volume at `/var/roundcube/db`.
 - Live Roundcube has no third-party `ident_switch` installation.
 
-The moving Docker tag is acceptable only as an input to discovery. The custom
-production image will pin a tested version and digest.
+Production remains on the official Roundcube image and pins the suite's exact
+Composer version. The optional custom image is retained only for offline
+fallback and CI verification.
 
 ## Repository topology
 
@@ -22,8 +23,9 @@ an unsquashed ancestor and the `upstream` remote is retained. The fork stays in
 `plugins/ident_switch`; SizeStation changes will be listed in
 `docs/ident-switch-upstream-diff.md` and tagged with the complete distribution.
 
-No Composer-installed dependency will be edited in place. Builds copy the
-versioned plugin source from this repository.
+No Composer-installed dependency is edited in place. This repository is one
+versioned Composer library; a stock-container post-setup task installs its two
+bundled plugin trees atomically.
 
 ## Runtime trust boundaries
 
@@ -84,8 +86,8 @@ provider refactoring, in addition to new provider and security tests.
 
 ## Component boundaries
 
-`packages/credentials` is a single namespaced Composer library installed once
-in the image. It owns credential value objects, contexts, the provider interface
+`packages/credentials` is an internal namespaced module autoloaded by the single
+suite package. It owns credential value objects, contexts, the provider interface
 and registry, a request-local cache, OpenBao KV v2 client, reference validation,
 error taxonomy, and redaction. It has no Authentik, Purelymail, Roundcube-user,
 or SizeStation assignment policy.
@@ -154,10 +156,9 @@ binding and preferred changes. Application checks alone are not sufficient.
 8. Add anchor authentication and first-login binding.
 9. Add materialization, reconciliation, and preferred switching.
 10. Add provisioning/validation/rotation/disable CLI with dry-run and JSON.
-11. Add image, Agent, policies, Swarm, Authentik, migration, and rollback docs.
+11. Add suite packaging, Agent, policies, Swarm, Authentik, migration, and rollback docs.
 12. Run the full unit/database/integration/security suite and publish final risks.
 
 Each gate is committed, tested in proportion to its scope, and pushed before the
 next gate. Production deployment happens only after the final verification gate;
 the live stack is inspection-only until then.
-
