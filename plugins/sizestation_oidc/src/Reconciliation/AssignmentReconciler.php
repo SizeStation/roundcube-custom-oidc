@@ -24,8 +24,7 @@ final class AssignmentReconciler
         int $roundcubeUserId,
         array $assignments,
         bool $manageTransaction = true,
-    ): ReconciliationResult
-    {
+    ): ReconciliationResult {
         $this->validator->validateForLogin($assignments);
         if ($manageTransaction && !$this->database->startTransaction()) {
             throw new RuntimeException('Unable to start assignment reconciliation');

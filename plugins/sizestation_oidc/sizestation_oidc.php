@@ -299,8 +299,7 @@ class sizestation_oidc extends rcube_plugin
     private function recordReconciliationCompleted(
         int $principalId,
         \SizeStation\Roundcube\Oidc\Reconciliation\ReconciliationResult $result,
-    ): void
-    {
+    ): void {
         try {
             $this->audit()->record(
                 \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationCompleted,
