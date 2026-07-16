@@ -46,6 +46,11 @@ class sizestation_oidc extends rcube_plugin
 
             return $args;
         }
+        if ($task === 'mail') {
+            $this->performPendingPreferredSwitch();
+
+            return $args;
+        }
         if ($task !== 'login') {
             return $args;
         }
@@ -156,6 +161,7 @@ class sizestation_oidc extends rcube_plugin
             $this->principals()->activate($principalId, (int) $rc->user->ID);
             $this->assignments()->markAnchorInitialized($assignmentId, $principalId);
             (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->establish($_SESSION, $this->loginPhase);
+            $this->reconcileAfterLogin($principalId, (int) $rc->user->ID);
             $this->audit()->record(
                 \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OidcLoginSuccess,
                 'oidc',
@@ -248,6 +254,81 @@ class sizestation_oidc extends rcube_plugin
             $this->failSafely('oidc_logout_discovery_failed', $exception, false);
         }
         $session->clear($_SESSION);
+    }
+
+    private function reconcileAfterLogin(int $principalId, int $roundcubeUserId): void
+    {
+        if ($this->loginPhase === null) {
+            return;
+        }
+        try {
+            $this->audit()->record(
+                \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationStarted,
+                'system',
+                'login',
+                $principalId,
+            );
+            $result = (new \SizeStation\Roundcube\Oidc\Reconciliation\AssignmentReconciler(
+                rcmail::get_instance()->db,
+            ))->reconcile($principalId, $roundcubeUserId, $this->loginPhase->assignments);
+            $this->audit()->record(
+                \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationCompleted,
+                'system',
+                'login',
+                $principalId,
+                metadata: [
+                    'created' => $result->created,
+                    'updated' => $result->updated,
+                    'disabled' => $result->disabled,
+                    'orphaned' => $result->orphaned,
+                ],
+            );
+            if ($result->preferredSwitchRecordId !== null) {
+                $_SESSION['sizestation_oidc.preferred_switch_id'] = $result->preferredSwitchRecordId;
+            }
+        } catch (\Throwable $exception) {
+            try {
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationFailed,
+                    'system',
+                    'login',
+                    $principalId,
+                    metadata: ['error_code' => 'reconciliation_failed'],
+                );
+            } catch (\Throwable) {
+            }
+            $this->failSafely('reconciliation_failed', $exception, false);
+        }
+    }
+
+    private function performPendingPreferredSwitch(): void
+    {
+        $recordId = $_SESSION['sizestation_oidc.preferred_switch_id'] ?? null;
+        if (!is_int($recordId) && !(is_string($recordId) && ctype_digit($recordId))) {
+            return;
+        }
+        unset($_SESSION['sizestation_oidc.preferred_switch_id']);
+        $oidcIdentity = (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->identity($_SESSION);
+        if ($oidcIdentity === null || !class_exists('IdentSwitchSwitcher')) {
+            return;
+        }
+        try {
+            $rc = rcmail::get_instance();
+            $switcher = new IdentSwitchSwitcher(new IdentSwitchCredentialService($rc));
+            if ($switcher->switchAccountById((int) $recordId, false)) {
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::MailboxSwitch,
+                    'system',
+                    'preferred',
+                    (int) $oidcIdentity['principal_id'],
+                    metadata: ['ident_switch_record_id' => (int) $recordId],
+                    sourceIp: $this->sourceIp(),
+                );
+                $rc->output->redirect(['_task' => 'mail', '_mbox' => 'INBOX']);
+            }
+        } catch (\Throwable $exception) {
+            $this->failSafely('preferred_switch_failed', $exception, false);
+        }
     }
 
     private function flow(): \SizeStation\Roundcube\Oidc\Oidc\OidcFlowService

@@ -31,10 +31,20 @@ class IdentSwitchSwitcher
      */
     public function switch_account(): void
     {
-        $rc = rcmail::get_instance();
-
-        $my_postfix_len = strlen(ident_switch::MY_POSTFIX);
         $identId = (int)rcube_utils::get_input_value('_ident-id', rcube_utils::INPUT_POST);
+        $this->switchAccountById($identId);
+    }
+
+    /**
+     * Switch to an account already authorized for the current Roundcube user.
+     *
+     * This is the trusted API used by managed preferred-account selection. The
+     * same ownership-constrained query is shared with the browser action.
+     */
+    public function switchAccountById(int $identId, bool $redirect = true): bool
+    {
+        $rc = rcmail::get_instance();
+        $my_postfix_len = strlen(ident_switch::MY_POSTFIX);
 
         $rc->session->remove('folders');
         $rc->session->remove('unseen_count');
@@ -79,7 +89,7 @@ class IdentSwitchSwitcher
                     \SizeStation\Roundcube\Credentials\CredentialPurpose::Imap,
                 );
                 if ($credentials === null) {
-                    return;
+                    return false;
                 }
 
                 ident_switch::write_log("Switching mailbox to one for identity with ID = {$r['iid']} (username = '{$r['username']}').");
@@ -109,7 +119,7 @@ class IdentSwitchSwitcher
                     if (!$this->validManagedEndpoint($r['imap_host'], $r['imap_port'])) {
                         $this->managedEndpointError((int) $r['iid'], 'IMAP');
 
-                        return;
+                        return false;
                     }
                 }
 
@@ -142,14 +152,18 @@ class IdentSwitchSwitcher
                 }
             } else {
                 ident_switch::write_log("Requested remote mailbox with ID = {$identId} not found.");
-                return;
+                return false;
             }
         }
 
-        $rc->output->redirect([
-            '_task' => 'mail',
-            '_mbox' => 'INBOX',
-        ]);
+        if ($redirect) {
+            $rc->output->redirect([
+                '_task' => 'mail',
+                '_mbox' => 'INBOX',
+            ]);
+        }
+
+        return true;
     }
 
     /**
