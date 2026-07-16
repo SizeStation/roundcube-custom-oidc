@@ -77,8 +77,9 @@ class IdentSwitchSwitcher
         } else {
             $sql = 'SELECT imap_host, flags, imap_port, imap_delimiter, drafts_mbox, sent_mbox,'
                 . ' junk_mbox, trash_mbox, ' . IdentSwitchCredentialService::ACCOUNT_FIELDS
-                . ' FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
-            $q = $rc->db->query($sql, $identId, $rc->user->ID);
+                . ' FROM ' . $rc->db->table_name(ident_switch::TABLE)
+                . ' WHERE id = ? AND user_id = ? AND flags & ? > 0';
+            $q = $rc->db->query($sql, $identId, $rc->user->ID, ident_switch::DB_ENABLED);
             $r = $rc->db->fetch_assoc($q);
             if (is_array($r)) {
                 $r['username'] = ident_switch::resolve_username((int)$r['iid'], $r['username']);
@@ -204,8 +205,9 @@ class IdentSwitchSwitcher
         $rc = rcmail::get_instance();
 
         $sql = 'SELECT smtp_host, smtp_port, smtp_auth, ' . IdentSwitchCredentialService::ACCOUNT_FIELDS
-            . ' FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE iid = ? AND user_id = ?';
-        $q = $rc->db->query($sql, $iid, $rc->user->ID);
+            . ' FROM ' . $rc->db->table_name(ident_switch::TABLE)
+            . ' WHERE iid = ? AND user_id = ? AND flags & ? > 0';
+        $q = $rc->db->query($sql, $iid, $rc->user->ID, ident_switch::DB_ENABLED);
         $r = $rc->db->fetch_assoc($q);
         if (is_array($r)) {
             // If this is an alias, follow parent_id to get the parent's SMTP config
@@ -213,8 +215,9 @@ class IdentSwitchSwitcher
                 ident_switch::debug_log("SMTP: identity {$iid} is alias, following parent_id={$r['parent_id']}");
                 $sql = 'SELECT smtp_host, smtp_port, smtp_auth, '
                     . IdentSwitchCredentialService::ACCOUNT_FIELDS . ' FROM '
-                    . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
-                $q = $rc->db->query($sql, $r['parent_id'], $rc->user->ID);
+                    . $rc->db->table_name(ident_switch::TABLE)
+                    . ' WHERE id = ? AND user_id = ? AND flags & ? > 0';
+                $q = $rc->db->query($sql, $r['parent_id'], $rc->user->ID, ident_switch::DB_ENABLED);
                 $r = $rc->db->fetch_assoc($q);
                 if (!is_array($r)) {
                     ident_switch::debug_log("SMTP: parent account not found, using default config");
@@ -293,8 +296,9 @@ class IdentSwitchSwitcher
         $rc = rcmail::get_instance();
 
         $sql = 'SELECT sieve_host, sieve_port, sieve_auth, ' . IdentSwitchCredentialService::ACCOUNT_FIELDS
-            . ' FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE iid = ? AND user_id = ?';
-        $q = $rc->db->query($sql, $iid, $rc->user->ID);
+            . ' FROM ' . $rc->db->table_name(ident_switch::TABLE)
+            . ' WHERE iid = ? AND user_id = ? AND flags & ? > 0';
+        $q = $rc->db->query($sql, $iid, $rc->user->ID, ident_switch::DB_ENABLED);
         $r = $rc->db->fetch_assoc($q);
         if (is_array($r)) {
             // If this is an alias, follow parent_id to get the parent's Sieve config
@@ -302,8 +306,9 @@ class IdentSwitchSwitcher
                 ident_switch::debug_log("Sieve: identity {$iid} is alias, following parent_id={$r['parent_id']}");
                 $sql = 'SELECT sieve_host, sieve_port, sieve_auth, '
                     . IdentSwitchCredentialService::ACCOUNT_FIELDS . ' FROM '
-                    . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
-                $q = $rc->db->query($sql, $r['parent_id'], $rc->user->ID);
+                    . $rc->db->table_name(ident_switch::TABLE)
+                    . ' WHERE id = ? AND user_id = ? AND flags & ? > 0';
+                $q = $rc->db->query($sql, $r['parent_id'], $rc->user->ID, ident_switch::DB_ENABLED);
                 $r = $rc->db->fetch_assoc($q);
                 if (!is_array($r)) {
                     ident_switch::debug_log("Sieve: parent account not found, using default config");

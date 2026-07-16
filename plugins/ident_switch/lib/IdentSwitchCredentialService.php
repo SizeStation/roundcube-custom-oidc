@@ -50,8 +50,13 @@ final class IdentSwitchCredentialService
     {
         $sql = 'SELECT ' . self::ACCOUNT_FIELDS . ' FROM '
             . $this->rc->db->table_name(ident_switch::TABLE)
-            . ' WHERE iid = ? AND user_id = ?';
-        $query = $this->rc->db->query($sql, $identityId, $this->rc->user->ID);
+            . ' WHERE iid = ? AND user_id = ? AND flags & ? > 0';
+        $query = $this->rc->db->query(
+            $sql,
+            $identityId,
+            $this->rc->user->ID,
+            ident_switch::DB_ENABLED,
+        );
         $row = $this->rc->db->fetch_assoc($query);
 
         return is_array($row) ? $row : null;
