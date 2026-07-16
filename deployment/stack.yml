@@ -14,6 +14,9 @@ services:
     networks: [openbao]
     deploy:
       replicas: 1
+      placement:
+        constraints:
+          - node.labels.roundcube.secrets == true
       restart_policy: {condition: any, delay: 5s}
 
   roundcube:
@@ -41,6 +44,9 @@ services:
     networks: [public]
     deploy:
       replicas: 1
+      placement:
+        constraints:
+          - node.labels.roundcube.secrets == true
       restart_policy: {condition: any, delay: 5s}
       update_config:
         order: stop-first

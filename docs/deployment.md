@@ -12,6 +12,9 @@ relevant overlays succeeded. Do not change it back to the internal HTTP URL.
 - `public` and `openbao` external Swarm overlay networks.
 - the existing `roundcube_db` volume and a single Roundcube replica while using
   SQLite;
+- exactly one Swarm node labeled `roundcube.secrets=true`; both Roundcube and
+  its Agent are constrained to this node because their protected tmpfs volume
+  uses the node-local Docker volume driver;
 - an Authentik provider configured as in `docs/authentik.md`;
 - the container system CA bundle, which validates the public OpenBao certificate.
 
@@ -37,6 +40,14 @@ bao kv put -mount=kv roundcube/oidc \
 Changing the existing DES key invalidates Roundcube-encrypted data.
 Create the external Swarm `roundcube_bao_role_id` and
 `roundcube_bao_secret_id` secrets from the AppRole credentials.
+
+Label the node that owns `roundcube_db` and will host the shared secret tmpfs.
+Do not put this label on more than one node:
+
+```sh
+docker node update --label-add roundcube.secrets=true ROUNDCUBE_NODE
+docker node inspect ROUNDCUBE_NODE --format '{{ index .Spec.Labels "roundcube.secrets" }}'
+```
 
 ## 2. Build and publish
 
@@ -89,10 +100,11 @@ docker stack config --compose-file deployment/stack.yml >/dev/null
 docker stack deploy --compose-file deployment/stack.yml roundcube
 ```
 
-The Agent and Roundcube share a RAM-backed volume owned by UID/GID 33. Token and
-rendered secret files are `0640`; the CA certificate is public configuration.
-Roundcube joins `openbao` only to reach the TLS service. Its runtime policy can
-read configuration and mailbox credentials but cannot write or list them.
+The co-located Agent and Roundcube share a node-local RAM-backed volume owned by
+UID/GID 33. Token and rendered secret files are `0640`; the CA certificate is
+public configuration. The Agent reaches OpenBao on the `openbao` overlay while
+Roundcube uses the configured TLS endpoint. Its runtime policy can read
+configuration and mailbox credentials but cannot write or list them.
 
 Check services and sanitized logs, then perform the acceptance checks in
 `docs/verification.md`. Do not print or inspect rendered secret contents.
