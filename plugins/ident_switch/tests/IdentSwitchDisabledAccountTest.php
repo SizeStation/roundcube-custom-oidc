@@ -74,6 +74,7 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
             $_SESSION = [];
             $pdo = new PDO('sqlite::memory:');
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $pdo->exec('CREATE TABLE system (name varchar(64) primary key, value text)');
             $pdo->exec(file_get_contents(dirname(__DIR__) . '/SQL/sqlite.initial.sql'));
             $config = new class {
                 public function get(string $key, mixed $default = null): mixed
