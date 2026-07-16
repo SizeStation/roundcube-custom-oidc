@@ -6,6 +6,7 @@ namespace SizeStation\Roundcube\Oidc\Service;
 
 use RuntimeException;
 use SizeStation\Roundcube\Oidc\Reconciliation\AssignmentReconciler;
+use SizeStation\Roundcube\Oidc\Reconciliation\RecoverableMaterializationException;
 use SizeStation\Roundcube\Oidc\Reconciliation\ReconciliationResult;
 use SizeStation\Roundcube\Oidc\Repository\AssignmentRepository;
 use SizeStation\Roundcube\Oidc\Repository\PrincipalRepository;
@@ -41,20 +42,22 @@ final class LoginFinalizer
         try {
             $this->principals->activate($principalId, $roundcubeUserId);
             $this->assignments->markAnchorInitialized($anchorAssignmentId, $principalId);
-            $result = $this->reconciler->reconcile(
-                $principalId,
-                $roundcubeUserId,
-                $assignments,
-                false,
-            );
             if (!$this->database->endTransaction()) {
                 throw new RuntimeException('Unable to commit OIDC login finalization');
             }
-
-            return $result;
         } catch (\Throwable $exception) {
             $this->database->rollbackTransaction();
             throw $exception;
+        }
+
+        try {
+            return $this->reconciler->reconcile($principalId, $roundcubeUserId, $assignments);
+        } catch (\Throwable $exception) {
+            throw new RecoverableMaterializationException(
+                'Secondary mailbox materialization failed; the anchor login remains valid',
+                0,
+                $exception,
+            );
         }
     }
 }

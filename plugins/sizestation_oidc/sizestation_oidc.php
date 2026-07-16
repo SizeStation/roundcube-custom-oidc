@@ -254,6 +254,38 @@ class sizestation_oidc extends rcube_plugin
             $this->loginPhase = null;
 
             return ['_task' => 'mail', '_mbox' => 'INBOX'];
+        } catch (\SizeStation\Roundcube\Oidc\Reconciliation\RecoverableMaterializationException $exception) {
+            (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->establish($_SESSION, $this->loginPhase);
+            unset($_SESSION['sizestation_oidc.preferred_switch_id']);
+            try {
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::ReconciliationFailed,
+                    'system',
+                    'login',
+                    $principalId,
+                    $assignmentId,
+                    ['error_code' => 'secondary_materialization_failed', 'anchor_login_preserved' => true],
+                );
+                $this->audit()->record(
+                    \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OidcLoginSuccess,
+                    'oidc',
+                    $this->loginPhase->identity->subject,
+                    $principalId,
+                    $assignmentId,
+                    ['roundcube_user_id' => (int) $rc->user->ID, 'degraded' => true],
+                    $this->sourceIp(),
+                    $_SERVER['HTTP_USER_AGENT'] ?? null,
+                );
+            } catch (\Throwable) {
+            }
+            $rc->write_log(
+                'sizestation_oidc',
+                'event=materialization_failure code=secondary_materialization_failed anchor_login_preserved=true',
+            );
+            $rc->output->show_message($this->gettext('secondaryunavailable'), 'warning');
+            $this->loginPhase = null;
+
+            return ['_task' => 'mail', '_mbox' => 'INBOX'];
         } catch (\Throwable $exception) {
             (new \SizeStation\Roundcube\Oidc\Session\OidcSession())->clear($_SESSION);
             unset($_SESSION['sizestation_oidc.preferred_switch_id']);

@@ -8,6 +8,7 @@ use PDO;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use SizeStation\Roundcube\Oidc\Reconciliation\AssignmentReconciler;
+use SizeStation\Roundcube\Oidc\Reconciliation\RecoverableMaterializationException;
 use SizeStation\Roundcube\Oidc\Repository\AssignmentRepository;
 use SizeStation\Roundcube\Oidc\Repository\PrincipalRepository;
 use SizeStation\Roundcube\Oidc\Service\LoginFinalizer;
@@ -121,11 +122,18 @@ final class ReconciliationTest extends TestCase
         self::assertSame(1, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
     }
 
-    public function testLoginFinalizationRollsBackPrincipalAnchorAndMaterializationTogether(): void
+    public function testSecondaryMaterializationFailurePreservesInitializedAnchorAndRollsBackSecondaries(): void
     {
         $repository = new AssignmentRepository($this->database);
+        $this->insertAssignment(
+            '00000000-0000-4000-8000-000000000003',
+            'tertiary@example.test',
+            false,
+            false,
+            'mailboxes/tertiary',
+        );
         $bound = $repository->bindPending($this->principalId, 'https://issuer.example', 'external-1');
-        $bound[1]['principal_id'] = 999;
+        $bound[2]['principal_id'] = 999;
 
         try {
             (new LoginFinalizer($this->database))->finalize(
@@ -135,28 +143,37 @@ final class ReconciliationTest extends TestCase
                 $bound,
             );
             self::fail('A changed assignment owner must abort login finalization');
-        } catch (\RuntimeException $exception) {
-            self::assertSame('Assignment ownership changed during reconciliation', $exception->getMessage());
+        } catch (RecoverableMaterializationException $exception) {
+            self::assertSame(
+                'Assignment ownership changed during reconciliation',
+                $exception->getPrevious()?->getMessage(),
+            );
         }
 
         $principal = $this->database->pdo->query(
             'SELECT status, roundcube_user_id, first_login_at FROM sizestation_oidc_principals',
         )->fetch(PDO::FETCH_ASSOC);
-        self::assertSame('pending', $principal['status']);
-        self::assertNull($principal['roundcube_user_id']);
-        self::assertNull($principal['first_login_at']);
+        self::assertSame('active', $principal['status']);
+        self::assertSame(10, (int) $principal['roundcube_user_id']);
+        self::assertNotNull($principal['first_login_at']);
 
         $anchor = $this->database->pdo->query(
             "SELECT materialization_status, credential_status FROM sizestation_mailbox_assignments"
             . " WHERE id = '00000000-0000-4000-8000-000000000001'",
         )->fetch(PDO::FETCH_ASSOC);
-        self::assertSame('pending', $anchor['materialization_status']);
-        self::assertSame('unknown', $anchor['credential_status']);
+        self::assertSame('anchor', $anchor['materialization_status']);
+        self::assertSame('valid', $anchor['credential_status']);
         self::assertSame(0, (int) $this->database->pdo->query('SELECT COUNT(*) FROM ident_switch')->fetchColumn());
         self::assertSame(0, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
     }
 
-    private function insertAssignment(string $id, string $mailbox, bool $anchor, bool $preferred): void
+    private function insertAssignment(
+        string $id,
+        string $mailbox,
+        bool $anchor,
+        bool $preferred,
+        ?string $credentialReference = null,
+    ): void
     {
         $statement = $this->database->pdo->prepare(
             'INSERT INTO sizestation_mailbox_assignments ('
@@ -170,7 +187,7 @@ final class ReconciliationTest extends TestCase
             'external-1',
             $mailbox,
             'openbao',
-            $anchor ? 'mailboxes/anchor' : 'mailboxes/secondary',
+            $credentialReference ?? ($anchor ? 'mailboxes/anchor' : 'mailboxes/secondary'),
             $anchor ? 1 : 0,
             $preferred ? 1 : 0,
             $anchor ? 'anchor' : null,
