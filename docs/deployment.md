@@ -1,9 +1,9 @@
 # Production deployment
 
-The current live stack must not be changed in-place until the TLS and secret
-prerequisites below pass. The observed OpenBao endpoint is HTTP; this code
-intentionally refuses it. Enable TLS on OpenBao first and issue a certificate
-whose SAN matches the service name used in `deployment/roundcube-agent.hcl`.
+The internal OpenBao listener is HTTP, which this code intentionally refuses.
+The supplied configuration instead uses the existing publicly certified
+`https://bao.sizestation.cloud` endpoint; bounded connectivity checks from both
+relevant overlays succeeded. Do not change it back to the internal HTTP URL.
 
 ## 1. Prerequisites
 
@@ -13,8 +13,7 @@ whose SAN matches the service name used in `deployment/roundcube-agent.hcl`.
 - the existing `roundcube_db` volume and a single Roundcube replica while using
   SQLite;
 - an Authentik provider configured as in `docs/authentik.md`;
-- the example CA PEM replaced with the certificate that issued OpenBao's server
-  certificate (never its private key).
+- the container system CA bundle, which validates the public OpenBao certificate.
 
 Set `ROUNDCUBE_PROXY_WHITELIST` to the narrow CIDR used by the Traefik-facing
 overlay (currently `10.0.1.0/24`). Roundcube trusts forwarded client addresses
@@ -26,15 +25,16 @@ its token use count to unlimited so Agent renewal works. Apply
 `deployment/openbao/provisioning-policy.hcl` to a distinct administrative
 identity whose short-lived token is mounted only in one-shot CLI containers.
 
-Seed runtime configuration without putting it in Git:
+The existing DES key remains at `kv/roundcube/des_key` with field `config`.
+Do not overwrite it. Seed only the new OIDC client secret without putting it in
+Git:
 
 ```sh
-bao kv put -mount=kv roundcube/config \
-  des_key='REPLACE_WITH_EXISTING_ROUNDCUBE_DES_KEY' \
-  oidc_client_secret='REPLACE_WITH_AUTHENTIK_SECRET'
+bao kv put -mount=kv roundcube/oidc \
+  client_secret='REPLACE_WITH_AUTHENTIK_SECRET'
 ```
 
-Keep the existing DES key; changing it invalidates Roundcube-encrypted data.
+Changing the existing DES key invalidates Roundcube-encrypted data.
 Create the external Swarm `roundcube_bao_role_id` and
 `roundcube_bao_secret_id` secrets from the AppRole credentials.
 

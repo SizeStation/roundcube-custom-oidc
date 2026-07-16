@@ -34,9 +34,8 @@
 - Managed Sieve credentials are supported by the provider abstraction, but the
   supplied Purelymail deployment leaves Sieve disabled until a trusted endpoint
   is configured and tested.
-- The current live OpenBao service was observed without TLS. Production rollout
-  is blocked until TLS and CA validation are operational; no insecure fallback
-  exists.
+- The internal OpenBao listener remains plaintext. Roundcube and its Agent must
+  use the existing public TLS endpoint; no insecure fallback exists.
 
 ## Operational security checks
 

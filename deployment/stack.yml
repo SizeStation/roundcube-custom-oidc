@@ -6,8 +6,6 @@ services:
     configs:
       - source: roundcube_bao_agent
         target: /etc/openbao/agent.hcl
-      - source: openbao_ca
-        target: /etc/openbao/ca/openbao-ca.pem
     secrets:
       - roundcube_bao_role_id
       - roundcube_bao_secret_id
@@ -37,12 +35,10 @@ services:
     configs:
       - source: roundcube_oidc_config
         target: /var/roundcube/config/sizestation_oidc.php
-      - source: openbao_ca
-        target: /run/openbao-ca.pem
     volumes:
       - roundcube_db:/var/roundcube/db
       - roundcube-bao-files:/run/app-secrets:ro
-    networks: [public, openbao]
+    networks: [public]
     deploy:
       replicas: 1
       restart_policy: {condition: any, delay: 5s}
@@ -74,7 +70,6 @@ networks:
 configs:
   roundcube_bao_agent: {file: ./roundcube-agent.hcl}
   roundcube_oidc_config: {file: ./roundcube-config.inc.php}
-  openbao_ca: {file: ./openbao-ca.pem.example}
 
 secrets:
   roundcube_bao_role_id: {external: true}

@@ -29,7 +29,7 @@ https://auth.sizestation.cloud/application/o/roundcube/
 
 Roundcube discovers the authorization, token, JWKS, and end-session endpoints
 from that issuer. Copy the client ID into the stack environment. Store the
-client secret only at `kv/roundcube/config` as `oidc_client_secret`; the Agent
+client secret only at `kv/roundcube/oidc` as `client_secret`; the Agent
 renders it into tmpfs.
 
 ## Stable pre-provisioning claim

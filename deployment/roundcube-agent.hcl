@@ -1,8 +1,8 @@
 pid_file = "/tmp/openbao-agent.pid"
 
 vault {
-  address = "https://openbao:8200"
-  ca_cert = "/etc/openbao/ca/openbao-ca.pem"
+  address = "https://bao.sizestation.cloud"
+  ca_cert = "/etc/ssl/certs/ca-certificates.crt"
 }
 
 auto_auth {
@@ -35,7 +35,7 @@ template {
   perms                = "0640"
   backup               = false
   error_on_missing_key = true
-  contents             = "{{ with secret \"kv/data/roundcube/config\" }}{{ .Data.data.des_key }}{{ end }}"
+  contents             = "{{ with secret \"kv/data/roundcube/des_key\" }}{{ .Data.data.config }}{{ end }}"
 }
 
 template {
@@ -43,5 +43,5 @@ template {
   perms                = "0640"
   backup               = false
   error_on_missing_key = true
-  contents             = "{{ with secret \"kv/data/roundcube/config\" }}{{ .Data.data.oidc_client_secret }}{{ end }}"
+  contents             = "{{ with secret \"kv/data/roundcube/oidc\" }}{{ .Data.data.client_secret }}{{ end }}"
 }

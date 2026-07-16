@@ -47,11 +47,11 @@ $config['sizestation_oidc.connect_timeout_seconds'] = 2;
 $config['sizestation_oidc.request_timeout_seconds'] = 5;
 $config['sizestation_oidc.imap_host'] = 'ssl://imap.purelymail.com:993';
 
-$config['sizestation_oidc.openbao_address'] = 'https://openbao:8200';
+$config['sizestation_oidc.openbao_address'] = 'https://bao.sizestation.cloud';
 $config['sizestation_oidc.openbao_token_file'] = '/run/app-secrets/openbao-token';
 $config['sizestation_oidc.openbao_kv_mount'] = 'kv';
 $config['sizestation_oidc.openbao_base_path'] = 'roundcube/mailboxes';
-$config['sizestation_oidc.openbao_ca_file'] = '/run/openbao-ca.pem';
+$config['sizestation_oidc.openbao_ca_file'] = '/etc/ssl/certs/ca-certificates.crt';
 $config['sizestation_oidc.openbao_connect_timeout_seconds'] = 2;
 $config['sizestation_oidc.openbao_request_timeout_seconds'] = 5;
 $config['sizestation_oidc.openbao_provisioning_token_file'] =
