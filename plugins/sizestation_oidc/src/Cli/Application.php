@@ -94,9 +94,23 @@ final class Application
         $dryRun = !empty($options['dry-run']);
         $username = is_string($options['username'] ?? null) ? $options['username'] : $mailbox;
         $this->assertMailboxUsername($mailbox, $username);
-        $password = $this->password($options, $stdin);
+        $createsSecret = !empty($options['password-stdin']);
+        $password = '';
+        $credentials = null;
         try {
-            $credentials = new AccountCredentials($username, $password);
+            if ($createsSecret) {
+                $password = $this->password($options, $stdin);
+                $credentials = new AccountCredentials($username, $password);
+            } else {
+                $credentials = ($this->credentialResolver)([
+                    'id' => '00000000-0000-4000-8000-000000000000',
+                    'mailbox_address' => $mailbox,
+                    'credential_provider' => 'openbao',
+                    'credential_reference' => $reference->value,
+                    'managed_externally' => 1,
+                ]);
+                $this->assertMailboxUsername($mailbox, $credentials->imapUsername());
+            }
             $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
             if ($dryRun) {
                 return [
@@ -108,11 +122,16 @@ final class Application
                     'openbao_paths' => [$reference->value],
                     'ident_switch_record_ids' => [],
                     'roundcube_identity_ids' => [],
-                    'validation_actions' => $this->validationActions(),
+                    'validation_actions' => array_merge(
+                        $createsSecret ? [] : ['read existing OpenBao credential'],
+                        $this->validationActions(),
+                    ),
                 ];
             }
 
-            $this->provisioner->create($reference, ['username' => $username, 'password' => $password]);
+            if ($createsSecret) {
+                $this->provisioner->create($reference, ['username' => $username, 'password' => $password]);
+            }
             $repository = new AdminRepository($this->database);
             try {
                 $assignment = $repository->createAssignment(
@@ -127,9 +146,11 @@ final class Application
                     'valid',
                 );
             } catch (\Throwable $exception) {
-                try {
-                    $this->provisioner->delete($reference);
-                } catch (\Throwable) {
+                if ($createsSecret) {
+                    try {
+                        $this->provisioner->delete($reference);
+                    } catch (\Throwable) {
+                    }
                 }
                 throw $exception;
             }
@@ -150,6 +171,7 @@ final class Application
                 'preferred' => (bool) $assignment['is_preferred'],
             ];
         } finally {
+            $credentials?->erase();
             $this->erase($password);
         }
     }
@@ -815,7 +837,7 @@ Commands:
   principal:show --principal-id ID
   principal:disable|principal:enable --principal-id ID
   assignment:create --issuer URL --external-user-id ID --mailbox ADDRESS
-                    --credential-reference PATH --password-stdin [--anchor] [--preferred]
+                    --credential-reference PATH [--password-stdin] [--anchor] [--preferred]
   assignment:list [--principal-id ID]
   assignment:show --assignment-id UUID
   assignment:disable|assignment:enable|assignment:remove --assignment-id UUID

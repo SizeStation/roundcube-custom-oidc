@@ -57,6 +57,56 @@ final class CliApplicationTest extends TestCase
         )->fetchColumn());
     }
 
+    public function testAssignmentCreateCanReferenceAnExistingSecretWithoutMutatingIt(): void
+    {
+        [$exit, $stdout, $stderr] = $this->runApplication([
+            'sizestation-oidc',
+            'assignment:create',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/existing',
+            '--anchor',
+            '--json',
+        ], '');
+
+        self::assertSame(0, $exit);
+        self::assertSame('', $stderr);
+        self::assertStringNotContainsString('resolved-secret', $stdout);
+        self::assertSame([], $this->provisioner->writes);
+        self::assertSame([], $this->provisioner->deletes);
+        self::assertSame('mailboxes/existing', $this->database->pdo->query(
+            'SELECT credential_reference FROM sizestation_mailbox_assignments',
+        )->fetchColumn());
+    }
+
+    public function testExistingSecretUsernameMustMatchTheMailbox(): void
+    {
+        [$exit, $stdout, $stderr] = $this->runApplication([
+            'sizestation-oidc',
+            'assignment:create',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/existing',
+            '--anchor',
+            '--json',
+        ], '', static fn (): AccountCredentials => new AccountCredentials(
+            'other@example.test',
+            'resolved-secret',
+        ));
+
+        self::assertSame(1, $exit);
+        self::assertSame('', $stdout);
+        self::assertStringContainsString('operation_rejected', $stderr);
+        self::assertStringNotContainsString('resolved-secret', $stderr);
+        self::assertSame([], $this->provisioner->writes);
+        self::assertSame([], $this->provisioner->deletes);
+        self::assertSame(0, (int) $this->database->pdo->query(
+            'SELECT COUNT(*) FROM sizestation_mailbox_assignments',
+        )->fetchColumn());
+    }
+
     public function testDryRunDoesNotWriteSecretOrDatabase(): void
     {
         [$exit, $stdout] = $this->runApplication([
