@@ -1,0 +1,6 @@
+<?php
+
+// This file intentionally contains no secrets. Sensitive values are read from
+// root-owned files rendered into the runtime secret volume.
+$config['sizestation_oidc.enabled'] = false;
+

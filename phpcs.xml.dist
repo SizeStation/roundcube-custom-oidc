@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<ruleset name="SizeStation Roundcube">
+    <description>PHP style checks for SizeStation Roundcube plugins.</description>
+    <file>packages/credentials/src</file>
+    <file>packages/credentials/tests</file>
+    <file>plugins/sizestation_oidc</file>
+    <file>tests</file>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <arg name="extensions" value="php"/>
+    <arg value="p"/>
+    <rule ref="PSR12"/>
+    <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
+        <exclude-pattern>plugins/*/*.php</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.Classes.ValidClassName.NotCamelCaps">
+        <exclude-pattern>plugins/*/*.php</exclude-pattern>
+    </rule>
+</ruleset>

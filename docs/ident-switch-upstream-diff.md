@@ -6,4 +6,7 @@ Upstream baseline: Gecka-Apps `ident_switch` 5.0.4
 This ledger will be updated with every fork change so upgrades and upstreamable
 patches remain reviewable.
 
-No SizeStation code changes have been made yet.
+## Distribution scaffold
+
+- Added an empty `tests` directory so the distribution-level PHPUnit suite can
+  discover fork tests as they are introduced. No upstream runtime code changed.
