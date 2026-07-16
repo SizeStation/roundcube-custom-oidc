@@ -9,6 +9,8 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use SizeStation\Roundcube\Oidc\Oidc\OidcClientConfig;
 use SizeStation\Roundcube\Oidc\Oidc\OidcFlowService;
+use SizeStation\Roundcube\Oidc\Oidc\OidcHttpResponse;
+use SizeStation\Roundcube\Oidc\Oidc\OidcHttpTransportInterface;
 use SizeStation\Roundcube\Oidc\Security\IdTokenValidator;
 use SizeStation\Roundcube\Oidc\Security\TokenValidationConfig;
 
@@ -118,6 +120,29 @@ final class OidcFlowServiceTest extends TestCase
             ->endSessionUrl('https://attacker.example/steal-session');
     }
 
+    public function testFailsClosedWhenDiscoveryIsUnavailable(): void
+    {
+        $transport = $this->fixedResponseTransport(new OidcHttpResponse(503, 'temporarily unavailable'));
+        $session = [];
+
+        $this->expectException(RuntimeException::class);
+        $this->service($transport)->authorizationUrl($session);
+    }
+
+    public function testFailsClosedForInvalidOrOversizedProviderJson(): void
+    {
+        foreach (['{invalid', str_repeat('x', 1048577)] as $body) {
+            $session = [];
+            try {
+                $this->service($this->fixedResponseTransport(new OidcHttpResponse(200, $body)))
+                    ->authorizationUrl($session);
+                self::fail('Invalid provider data must be rejected');
+            } catch (RuntimeException) {
+                self::assertSame([], $session);
+            }
+        }
+    }
+
     /** @return array<string, mixed> */
     private function metadata(): array
     {
@@ -131,7 +156,7 @@ final class OidcFlowServiceTest extends TestCase
         ];
     }
 
-    private function service(FakeOidcTransport $transport): OidcFlowService
+    private function service(OidcHttpTransportInterface $transport): OidcFlowService
     {
         $config = new OidcClientConfig(
             'https://issuer.example/',
@@ -145,6 +170,25 @@ final class OidcFlowServiceTest extends TestCase
             new IdTokenValidator(new TokenValidationConfig($config->issuer, $config->clientId)),
             http: $transport,
         );
+    }
+
+    private function fixedResponseTransport(OidcHttpResponse $response): OidcHttpTransportInterface
+    {
+        return new class ($response) implements OidcHttpTransportInterface {
+            public function __construct(private readonly OidcHttpResponse $response)
+            {
+            }
+
+            public function request(
+                string $method,
+                string $url,
+                array $headers,
+                ?string $body,
+                OidcClientConfig $config,
+            ): OidcHttpResponse {
+                return $this->response;
+            }
+        };
     }
 
     private function token(string $nonce): string
