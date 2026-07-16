@@ -83,4 +83,20 @@ CREATE TABLE IF NOT EXISTS `sizestation_oidc_audit_log` (
         REFERENCES `sizestation_mailbox_assignments` (`id`)
 );
 
-INSERT INTO `system` (`name`, `value`) VALUES ('sizestation_oidc-version', '2026071600');
+CREATE TABLE `sizestation_oidc_replay_codes` (
+    `code_hash` varchar(64) NOT NULL,
+    `expires_at` varchar(32) NOT NULL,
+    `created_at` varchar(32) NOT NULL,
+    PRIMARY KEY (`code_hash`)
+) ROW_FORMAT=DYNAMIC ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `sizestation_oidc_rate_limits` (
+    `limiter_key` varchar(96) NOT NULL,
+    `window_started_at` varchar(32) NOT NULL,
+    `attempts` integer NOT NULL,
+    `expires_at` varchar(32) NOT NULL,
+    PRIMARY KEY (`limiter_key`),
+    CHECK (`attempts` > 0)
+) ROW_FORMAT=DYNAMIC ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+INSERT INTO `system` (`name`, `value`) VALUES ('sizestation_oidc-version', '2026071601');

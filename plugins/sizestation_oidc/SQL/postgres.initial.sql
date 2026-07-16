@@ -76,4 +76,17 @@ CREATE INDEX IX_sizestation_audit_principal ON sizestation_oidc_audit_log(princi
 CREATE INDEX IX_sizestation_audit_assignment ON sizestation_oidc_audit_log(assignment_id);
 CREATE INDEX IX_sizestation_audit_created ON sizestation_oidc_audit_log(created_at);
 
-INSERT INTO system (name, value) VALUES ('sizestation_oidc-version', '2026071600');
+CREATE TABLE sizestation_oidc_replay_codes (
+    code_hash varchar(64) PRIMARY KEY,
+    expires_at varchar(32) NOT NULL,
+    created_at varchar(32) NOT NULL
+);
+
+CREATE TABLE sizestation_oidc_rate_limits (
+    limiter_key varchar(96) PRIMARY KEY,
+    window_started_at varchar(32) NOT NULL,
+    attempts integer NOT NULL CHECK(attempts > 0),
+    expires_at varchar(32) NOT NULL
+);
+
+INSERT INTO system (name, value) VALUES ('sizestation_oidc-version', '2026071601');

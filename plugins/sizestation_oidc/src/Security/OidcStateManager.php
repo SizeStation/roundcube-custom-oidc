@@ -52,6 +52,12 @@ final class OidcStateManager
         return ['nonce' => $pending['nonce'], 'code_verifier' => $pending['code_verifier']];
     }
 
+    /** @param array<string, mixed> $session */
+    public function consumeError(array &$session, string $state, int $ttlSeconds = 300, int $now = 0): void
+    {
+        $this->consume($session, $state, $ttlSeconds, $now);
+    }
+
     private function random(int $bytes): string
     {
         return $this->encode(random_bytes($bytes));

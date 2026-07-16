@@ -26,7 +26,13 @@ final class PrincipalRepository
                 throw new RepositoryException('OIDC principal external identifier mismatch');
             }
 
-            return $principal;
+            if (in_array((string) $principal['status'], ['disabled', 'error'], true)) {
+                throw new RepositoryException('OIDC principal is not active');
+            }
+
+            $this->updateProfile((int) $principal['id'], $profile);
+
+            return $this->findById((int) $principal['id']) ?? $principal;
         }
 
         $external = $this->findByExternalId($issuer, $externalUserId);
@@ -79,13 +85,20 @@ final class PrincipalRepository
         return $this->find('issuer = ? AND external_user_id = ?', $issuer, $externalUserId);
     }
 
+    /** @return array<string, mixed>|null */
+    public function findById(int $principalId): ?array
+    {
+        return $this->find('id = ?', (string) $principalId);
+    }
+
     public function activate(int $principalId, int $roundcubeUserId): void
     {
         $now = gmdate('Y-m-d\TH:i:s\Z');
         $query = $this->database->query(
             'UPDATE ' . $this->database->table_name('sizestation_oidc_principals')
             . ' SET roundcube_user_id = ?, status = ?, first_login_at = COALESCE(first_login_at, ?),'
-            . ' last_login_at = ?, updated_at = ? WHERE id = ? AND status != ?',
+            . ' last_login_at = ?, updated_at = ? WHERE id = ? AND status != ?'
+            . ' AND (roundcube_user_id IS NULL OR roundcube_user_id = ?)',
             $roundcubeUserId,
             'active',
             $now,
@@ -93,9 +106,27 @@ final class PrincipalRepository
             $now,
             $principalId,
             'disabled',
+            $roundcubeUserId,
         );
         if (!$query || $this->database->affected_rows($query) !== 1) {
             throw new RepositoryException('Unable to activate the OIDC principal');
+        }
+    }
+
+    /** @param array{email?: string, preferred_username?: string, display_name?: string} $profile */
+    private function updateProfile(int $principalId, array $profile): void
+    {
+        $query = $this->database->query(
+            'UPDATE ' . $this->database->table_name('sizestation_oidc_principals')
+            . ' SET oidc_email = ?, preferred_username = ?, display_name = ?, updated_at = ? WHERE id = ?',
+            $profile['email'] ?? null,
+            $profile['preferred_username'] ?? null,
+            $profile['display_name'] ?? null,
+            gmdate('Y-m-d\TH:i:s\Z'),
+            $principalId,
+        );
+        if (!$query) {
+            throw new RepositoryException('Unable to update the OIDC principal profile');
         }
     }
 

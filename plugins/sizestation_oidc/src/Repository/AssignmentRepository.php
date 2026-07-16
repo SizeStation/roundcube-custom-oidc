@@ -84,4 +84,53 @@ final class AssignmentRepository
 
         throw new RepositoryException('Anchor assignment could not be resolved');
     }
+
+    /** @return array<string, mixed>|null */
+    public function findOwnedEnabledAnchor(string $assignmentId, int $principalId): ?array
+    {
+        $query = $this->database->query(
+            'SELECT * FROM ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' WHERE id = ? AND principal_id = ? AND enabled = ? AND is_anchor = ?',
+            $assignmentId,
+            $principalId,
+            1,
+            1,
+        );
+        $row = $this->database->fetch_assoc($query);
+
+        return is_array($row) ? $row : null;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function preferred(array $assignments): ?array
+    {
+        foreach ($assignments as $assignment) {
+            if (!empty($assignment['enabled']) && !empty($assignment['is_preferred'])) {
+                return $assignment;
+            }
+        }
+
+        return null;
+    }
+
+    public function markAnchorInitialized(string $assignmentId, int $principalId): void
+    {
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        $query = $this->database->query(
+            'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' SET materialization_status = ?, credential_status = ?, last_used_at = ?, updated_at = ?'
+            . ' WHERE id = ? AND principal_id = ? AND enabled = ? AND is_anchor = ?',
+            'anchor',
+            'valid',
+            $now,
+            $now,
+            $assignmentId,
+            $principalId,
+            1,
+            1,
+        );
+        if (!$query || $this->database->affected_rows($query) !== 1) {
+            throw new RepositoryException('Unable to initialize anchor assignment');
+        }
+    }
 }

@@ -24,13 +24,16 @@ final class IdTokenValidator
         }
 
         $previousLeeway = JWT::$leeway;
+        $previousTimestamp = JWT::$timestamp;
         JWT::$leeway = $this->config->clockToleranceSeconds;
+        JWT::$timestamp = $now ?: null;
         try {
             $claims = (array) JWT::decode($idToken, JWK::parseKeySet($jwks));
         } catch (Throwable $exception) {
             throw new RuntimeException('ID token validation failed', 0, $exception);
         } finally {
             JWT::$leeway = $previousLeeway;
+            JWT::$timestamp = $previousTimestamp;
         }
 
         $now = $now ?: time();
@@ -42,7 +45,11 @@ final class IdTokenValidator
             throw new RuntimeException('ID token identity claims are invalid');
         }
 
-        $audiences = is_array($claims['aud'] ?? null) ? $claims['aud'] : [$claims['aud'] ?? null];
+        $audienceClaim = $claims['aud'] ?? null;
+        $audiences = is_array($audienceClaim) ? $this->stringList($audienceClaim) : [$audienceClaim];
+        if ($audiences === [] || in_array(null, $audiences, true)) {
+            throw new RuntimeException('ID token audience is invalid');
+        }
         if (!in_array($this->config->clientId, $audiences, true)) {
             throw new RuntimeException('ID token audience is invalid');
         }
@@ -69,6 +76,9 @@ final class IdTokenValidator
         }
 
         $authTime = isset($claims['auth_time']) ? $this->requiredInteger($claims, 'auth_time') : $issuedAt;
+        if ($authTime > $now + $tolerance) {
+            throw new RuntimeException('ID token authentication time is invalid');
+        }
 
         return new ValidatedIdentity(
             $issuer,
@@ -103,7 +113,7 @@ final class IdTokenValidator
     private function requiredString(array $claims, string $key): string
     {
         $value = $claims[$key] ?? null;
-        if (!is_string($value) || $value === '') {
+        if (!is_string($value) || $value === '' || strlen($value) > 255) {
             throw new RuntimeException('ID token required claim is missing');
         }
 
