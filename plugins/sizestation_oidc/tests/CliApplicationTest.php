@@ -11,6 +11,7 @@ use SizeStation\Roundcube\Credentials\AccountCredentials;
 use SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind;
 use SizeStation\Roundcube\Credentials\Exception\ExternalCredentialException;
 use SizeStation\Roundcube\Oidc\Cli\Application;
+use SizeStation\Roundcube\Oidc\Provisioning\MailboxCredentialValidator;
 use SizeStation\Roundcube\Oidc\Repository\AdminRepository;
 use SizeStation\Roundcube\Oidc\Repository\PrincipalRepository;
 
@@ -548,6 +549,31 @@ final class CliApplicationTest extends TestCase
         )->fetchColumn());
     }
 
+    public function testTransientMailboxValidationFailurePreservesLastKnownValidStatus(): void
+    {
+        [, $output] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor', '--anchor', '--password-stdin', '--json',
+        ], "anchor-secret\n");
+        $assignmentId = (string) json_decode($output, true, flags: JSON_THROW_ON_ERROR)['assignment_id'];
+
+        [$exit] = $this->runApplication([
+            'sizestation-oidc',
+            'assignment:validate',
+            '--assignment-id=' . $assignmentId,
+            '--json',
+        ], '', null, new MailboxCredentialValidator('ssl://127.0.0.1:1', 'ssl://127.0.0.1:1', 1));
+
+        self::assertSame(1, $exit);
+        $assignment = $this->database->pdo->query(
+            "SELECT credential_status, last_error_code FROM sizestation_mailbox_assignments"
+            . " WHERE id = '{$assignmentId}'",
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame('valid', $assignment['credential_status']);
+        self::assertSame('mailbox_endpoint_unavailable', $assignment['last_error_code']);
+    }
+
     public function testCanonicalAssignmentCommandsListShowEnableAndSelectPreLoginAnchor(): void
     {
         [, $anchorOutput] = $this->runApplication([
@@ -647,8 +673,12 @@ final class CliApplicationTest extends TestCase
     /** @param list<string> $arguments
      *  @return array{int, string, string}
      */
-    private function runApplication(array $arguments, string $input, ?callable $resolver = null): array
-    {
+    private function runApplication(
+        array $arguments,
+        string $input,
+        ?callable $resolver = null,
+        ?MailboxCredentialValidator $validator = null,
+    ): array {
         $stdin = fopen('php://memory', 'r+');
         fwrite($stdin, $input);
         rewind($stdin);
@@ -660,6 +690,7 @@ final class CliApplicationTest extends TestCase
                 (string) $assignment['mailbox_address'],
                 'resolved-secret',
             ),
+            $validator,
         );
         $exit = $application->run(
             $arguments,

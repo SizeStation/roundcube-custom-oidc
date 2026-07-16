@@ -6,6 +6,7 @@ namespace SizeStation\Roundcube\Oidc\Provisioning;
 
 use RuntimeException;
 use SizeStation\Roundcube\Credentials\AccountCredentials;
+use SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind;
 
 final class MailboxCredentialValidator
 {
@@ -38,7 +39,7 @@ final class MailboxCredentialValidator
         try {
             $greeting = $this->readLine($stream);
             if (!str_starts_with($greeting, '* OK')) {
-                throw new RuntimeException('IMAP validation greeting was rejected');
+                throw new MailboxValidationException('imap_unavailable', CredentialFailureKind::Unavailable);
             }
             $payload = base64_encode("\0{$username}\0{$password}");
             $this->write($stream, "A001 AUTHENTICATE PLAIN {$payload}\r\n");
@@ -51,7 +52,10 @@ final class MailboxCredentialValidator
             }
             $this->write($stream, "A002 LOGOUT\r\n");
             if (!str_starts_with($response, 'A001 OK')) {
-                throw new RuntimeException('IMAP credential validation failed');
+                throw new MailboxValidationException(
+                    'imap_authentication_rejected',
+                    CredentialFailureKind::Invalid,
+                );
             }
         } finally {
             fclose($stream);
@@ -66,18 +70,21 @@ final class MailboxCredentialValidator
         $payload = '';
         try {
             if (!$this->responseCode($this->readResponse($stream), 220)) {
-                throw new RuntimeException('SMTP validation greeting was rejected');
+                throw new MailboxValidationException('smtp_unavailable', CredentialFailureKind::Unavailable);
             }
             $this->write($stream, "EHLO roundcube.sizestation.invalid\r\n");
             if (!$this->responseCode($this->readResponse($stream), 250)) {
-                throw new RuntimeException('SMTP validation EHLO failed');
+                throw new MailboxValidationException('smtp_unavailable', CredentialFailureKind::Unavailable);
             }
             $payload = base64_encode("\0{$username}\0{$password}");
             $this->write($stream, "AUTH PLAIN {$payload}\r\n");
             $authenticated = $this->responseCode($this->readResponse($stream), 235);
             $this->write($stream, "QUIT\r\n");
             if (!$authenticated) {
-                throw new RuntimeException('SMTP credential validation failed');
+                throw new MailboxValidationException(
+                    'smtp_authentication_rejected',
+                    CredentialFailureKind::Invalid,
+                );
             }
         } finally {
             fclose($stream);
@@ -106,7 +113,7 @@ final class MailboxCredentialValidator
             $context,
         );
         if (!is_resource($stream)) {
-            throw new RuntimeException('Mailbox validation endpoint is unavailable');
+            throw new MailboxValidationException('mailbox_endpoint_unavailable', CredentialFailureKind::Unavailable);
         }
         stream_set_timeout($stream, $this->timeoutSeconds);
 
@@ -132,7 +139,7 @@ final class MailboxCredentialValidator
     {
         $line = fgets($stream, 8192);
         if (!is_string($line)) {
-            throw new RuntimeException('Mailbox validation connection ended unexpectedly');
+            throw new MailboxValidationException('mailbox_connection_lost', CredentialFailureKind::Unavailable);
         }
 
         return rtrim($line, "\r\n");
@@ -154,7 +161,7 @@ final class MailboxCredentialValidator
     private function write($stream, string $command): void
     {
         if (fwrite($stream, $command) !== strlen($command)) {
-            throw new RuntimeException('Mailbox validation write failed');
+            throw new MailboxValidationException('mailbox_connection_lost', CredentialFailureKind::Unavailable);
         }
     }
 

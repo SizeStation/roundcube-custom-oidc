@@ -12,6 +12,7 @@ use SizeStation\Roundcube\Credentials\OpenBao\CredentialReference;
 use SizeStation\Roundcube\Oidc\Domain\MailboxAddress;
 use SizeStation\Roundcube\Oidc\Audit\AuditEvent;
 use SizeStation\Roundcube\Oidc\Provisioning\MailboxCredentialValidator;
+use SizeStation\Roundcube\Oidc\Provisioning\MailboxValidationException;
 use SizeStation\Roundcube\Oidc\Provisioning\SecretProvisionerInterface;
 use SizeStation\Roundcube\Oidc\Reconciliation\AssignmentReconciler;
 use SizeStation\Roundcube\Oidc\Repository\AdminRepository;
@@ -234,44 +235,7 @@ final class Application
                 array_merge(['read OpenBao credential'], $this->validationActions()),
             );
         }
-        $repository = new AdminRepository($this->database);
-        $credentials = null;
-        try {
-            $credentials = ($this->credentialResolver)($assignment);
-            $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
-            $repository->markCredentialStatus((string) $assignment['id'], 'valid');
-            $event = AuditEvent::CredentialValidationSuccess;
-            $status = 'valid';
-        } catch (\Throwable $exception) {
-            $errorCode = $exception instanceof ExternalCredentialException
-                ? $exception->errorCode
-                : 'credential_validation_failed';
-            $unavailable = $exception instanceof ExternalCredentialException
-                && $exception->kind !== \SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind::Invalid;
-            if ($unavailable) {
-                $repository->recordCredentialAvailabilityFailure((string) $assignment['id'], $errorCode);
-            } else {
-                $repository->markCredentialStatus((string) $assignment['id'], 'invalid', $errorCode);
-            }
-            $this->auditRepository()->record(
-                $unavailable ? AuditEvent::OpenBaoUnavailable : AuditEvent::CredentialValidationFailure,
-                'cli',
-                'administrator',
-                $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
-                (string) $assignment['id'],
-                ['error_code' => $errorCode],
-            );
-            throw $exception;
-        } finally {
-            $credentials?->erase();
-        }
-        $this->auditRepository()->record(
-            $event,
-            'cli',
-            'administrator',
-            $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
-            (string) $assignment['id'],
-        );
+        $status = $this->validateAssignmentCredential($assignment);
 
         return ['ok' => true, 'assignment_id' => $assignment['id'], 'credential_status' => $status];
     }
@@ -538,7 +502,10 @@ final class Application
                         $assignments,
                         'roundcube_identity_id',
                     ))),
-                    'validation_actions' => [],
+                    'validation_actions' => array_merge(
+                        ['read enabled OpenBao credentials'],
+                        $this->validationActions(),
+                    ),
                 ];
                 continue;
             }
@@ -640,6 +607,16 @@ final class Application
             (string) $principal['issuer'],
             (string) $principal['external_user_id'],
         );
+        foreach ($assignments as $assignment) {
+            if (empty($assignment['enabled'])) {
+                continue;
+            }
+            try {
+                $this->validateAssignmentCredential($assignment);
+            } catch (\Throwable) {
+                // Credential health is recorded, but reconciliation must remain repairable and idempotent.
+            }
+        }
 
         return (new AssignmentReconciler($this->database))->reconcile(
             $principalId,
@@ -662,6 +639,51 @@ final class Application
     private function auditRepository(): AuditLogRepository
     {
         return new AuditLogRepository($this->database);
+    }
+
+    /** @param array<string, mixed> $assignment */
+    private function validateAssignmentCredential(array $assignment): string
+    {
+        $repository = new AdminRepository($this->database);
+        $credentials = null;
+        try {
+            $credentials = ($this->credentialResolver)($assignment);
+            $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
+            $repository->markCredentialStatus((string) $assignment['id'], 'valid');
+            $this->auditRepository()->record(
+                AuditEvent::CredentialValidationSuccess,
+                'cli',
+                'administrator',
+                $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
+                (string) $assignment['id'],
+            );
+
+            return 'valid';
+        } catch (\Throwable $exception) {
+            $typed = $exception instanceof ExternalCredentialException
+                || $exception instanceof MailboxValidationException;
+            $errorCode = $typed ? $exception->errorCode : 'credential_validation_failed';
+            $unavailable = $typed
+                && $exception->kind !== \SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind::Invalid;
+            if ($unavailable) {
+                $repository->recordCredentialAvailabilityFailure((string) $assignment['id'], $errorCode);
+            } else {
+                $repository->markCredentialStatus((string) $assignment['id'], 'invalid', $errorCode);
+            }
+            $this->auditRepository()->record(
+                $exception instanceof ExternalCredentialException && $unavailable
+                    ? AuditEvent::OpenBaoUnavailable
+                    : AuditEvent::CredentialValidationFailure,
+                'cli',
+                'administrator',
+                $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
+                (string) $assignment['id'],
+                ['error_code' => $errorCode, 'unavailable' => $unavailable],
+            );
+            throw $exception;
+        } finally {
+            $credentials?->erase();
+        }
     }
 
     /** @param list<string> $arguments
