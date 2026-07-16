@@ -99,3 +99,30 @@ $config['ident_switch.preconfig_only'] = false;
  * Default: false.
  */
 $config['ident_switch.debug'] = false;
+
+/*
+ * Prevent users from creating new arbitrary secondary IMAP accounts. Existing
+ * unmanaged accounts remain editable; externally managed rows are always
+ * protected server-side regardless of this setting.
+ */
+$config['ident_switch.managed_only'] = false;
+
+/*
+ * Optional OpenBao KV v2 provider. All values are administrator-controlled.
+ * Leave unset when external credentials are not used.
+ */
+// $config['ident_switch.openbao_address'] = 'https://openbao:8200';
+// $config['ident_switch.openbao_token_file'] = '/run/app-secrets/openbao-token';
+// $config['ident_switch.openbao_kv_mount'] = 'secret';
+// $config['ident_switch.openbao_base_path'] = 'roundcube/mailboxes';
+// $config['ident_switch.openbao_ca_file'] = '/run/app-secrets/openbao-ca.pem';
+$config['ident_switch.openbao_connect_timeout_seconds'] = 2;
+$config['ident_switch.openbao_request_timeout_seconds'] = 5;
+
+/* Trusted connection endpoints for externally managed accounts. */
+$config['ident_switch.managed_imap_host'] = 'ssl://imap.purelymail.com';
+$config['ident_switch.managed_imap_port'] = 993;
+$config['ident_switch.managed_smtp_host'] = 'ssl://smtp.purelymail.com';
+$config['ident_switch.managed_smtp_port'] = 465;
+$config['ident_switch.managed_sieve_host'] = null;
+$config['ident_switch.managed_sieve_port'] = 4190;

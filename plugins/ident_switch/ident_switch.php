@@ -15,10 +15,22 @@
  * @url https://github.com/Gecka-apps/ident_switch
  */
 
+$sizeStationAutoloaders = [
+    '/opt/sizestation/vendor/autoload.php',
+    dirname(__DIR__, 2) . '/vendor/autoload.php',
+];
+foreach ($sizeStationAutoloaders as $sizeStationAutoloader) {
+    if (is_file($sizeStationAutoloader)) {
+        require_once $sizeStationAutoloader;
+        break;
+    }
+}
+
 require_once __DIR__ . '/lib/IdentSwitchPreconfig.php';
 require_once __DIR__ . '/lib/IdentSwitchForm.php';
 require_once __DIR__ . '/lib/IdentSwitchSwitcher.php';
 require_once __DIR__ . '/lib/IdentSwitchChecker.php';
+require_once __DIR__ . '/lib/IdentSwitchCredentialService.php';
 
 /**
  * Roundcube plugin for fast switching between multiple IMAP accounts.
@@ -73,16 +85,18 @@ class ident_switch extends rcube_plugin
     private IdentSwitchSwitcher $switcher;
     private IdentSwitchPreconfig $preconfig;
     private IdentSwitchChecker $checker;
+    private IdentSwitchCredentialService $credentials;
 
     /**
      * Initialize plugin: register hooks, actions, and save default folder config.
      */
     public function init(): void
     {
-        $this->form = new IdentSwitchForm($this);
-        $this->switcher = new IdentSwitchSwitcher();
+        $this->credentials = new IdentSwitchCredentialService(rcmail::get_instance());
+        $this->form = new IdentSwitchForm($this, $this->credentials);
+        $this->switcher = new IdentSwitchSwitcher($this->credentials);
         $this->preconfig = new IdentSwitchPreconfig($this);
-        $this->checker = new IdentSwitchChecker();
+        $this->checker = new IdentSwitchChecker($this->credentials);
 
         $this->add_hook('startup', [$this, 'on_startup']);
         $this->add_hook('render_page', [$this, 'on_render_page']);

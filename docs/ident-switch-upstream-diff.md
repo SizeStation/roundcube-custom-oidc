@@ -27,3 +27,19 @@ patches remain reviewable.
 - The client reads the Agent token sink for each request. On a forbidden
   response it rereads and retries exactly once to handle token rotation.
 - No upstream runtime code changed in this commit.
+
+## Managed-account integration
+
+- Added portable managed credential columns and the `2026071600` migration for
+  SQLite, PostgreSQL, and MySQL/MariaDB. Legacy password columns remain intact
+  for unmanaged accounts; managed rows leave them unused.
+- Routed account switching, alias-aware SMTP, ManageSieve, background unread
+  checks, and primary-account return state through the provider registry.
+- Added request-local provider reuse and sanitized provider failure handling.
+- Managed accounts use administrator-configured IMAP/SMTP/Sieve endpoints rather
+  than row or browser-supplied hosts.
+- Managed identity forms show an ownership notice and do not expose connection
+  fields. Update/delete hooks enforce immutability server-side, and optional
+  managed-only mode rejects direct POST attempts to create arbitrary accounts.
+- Moved the SizeStation Composer autoloader to `/opt/sizestation/vendor` so the
+  custom image does not overwrite Roundcube's own vendor/autoload metadata.

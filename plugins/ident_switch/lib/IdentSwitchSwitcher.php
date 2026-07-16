@@ -18,6 +18,10 @@
  */
 class IdentSwitchSwitcher
 {
+    public function __construct(private readonly IdentSwitchCredentialService $credentials)
+    {
+    }
+
     /**
      * Handle the account switch action (AJAX).
      *
@@ -63,11 +67,20 @@ class IdentSwitchSwitcher
                 }
             }
         } else {
-            $sql = 'SELECT imap_host, flags, imap_port, imap_delimiter, drafts_mbox, sent_mbox, junk_mbox, trash_mbox, username, password, iid FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
+            $sql = 'SELECT imap_host, flags, imap_port, imap_delimiter, drafts_mbox, sent_mbox,'
+                . ' junk_mbox, trash_mbox, ' . IdentSwitchCredentialService::ACCOUNT_FIELDS
+                . ' FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
             $q = $rc->db->query($sql, $identId, $rc->user->ID);
             $r = $rc->db->fetch_assoc($q);
             if (is_array($r)) {
                 $r['username'] = ident_switch::resolve_username((int)$r['iid'], $r['username']);
+                $credentials = $this->resolveCredentials(
+                    $r,
+                    \SizeStation\Roundcube\Credentials\CredentialPurpose::Imap,
+                );
+                if ($credentials === null) {
+                    return;
+                }
 
                 ident_switch::write_log("Switching mailbox to one for identity with ID = {$r['iid']} (username = '{$r['username']}').");
 
@@ -90,6 +103,16 @@ class IdentSwitchSwitcher
                     }
                 }
 
+                if ($this->credentials->isManaged($r)) {
+                    $r['imap_host'] = $rc->config->get('ident_switch.managed_imap_host');
+                    $r['imap_port'] = $rc->config->get('ident_switch.managed_imap_port');
+                    if (!$this->validManagedEndpoint($r['imap_host'], $r['imap_port'])) {
+                        $this->managedEndpointError((int) $r['iid'], 'IMAP');
+
+                        return;
+                    }
+                }
+
                 $parsed = ident_switch::parse_host_scheme($r['imap_host'] ?: 'localhost');
                 $host = $parsed['host'];
                 $ssl = $parsed['scheme'] ?: null;
@@ -107,8 +130,8 @@ class IdentSwitchSwitcher
                 $_SESSION['storage_ssl'] = $ssl;
                 $_SESSION['storage_port'] = $port;
                 $_SESSION['imap_delimiter'] = $delimiter;
-                $_SESSION['username'] = $r['username'];
-                $_SESSION['password'] = $r['password'];
+                $_SESSION['username'] = $credentials->imapUsername();
+                $_SESSION['password'] = $rc->encrypt($credentials->imapPassword());
                 $_SESSION['iid' . ident_switch::MY_POSTFIX] = $r['iid'];
 
                 foreach (rcube_storage::$folder_types as $type) {
@@ -158,14 +181,17 @@ class IdentSwitchSwitcher
 
         $rc = rcmail::get_instance();
 
-        $sql = 'SELECT parent_id, smtp_host, smtp_port, username, smtp_auth, smtp_username, smtp_password, password, iid FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE iid = ? AND user_id = ?';
+        $sql = 'SELECT smtp_host, smtp_port, smtp_auth, ' . IdentSwitchCredentialService::ACCOUNT_FIELDS
+            . ' FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE iid = ? AND user_id = ?';
         $q = $rc->db->query($sql, $iid, $rc->user->ID);
         $r = $rc->db->fetch_assoc($q);
         if (is_array($r)) {
             // If this is an alias, follow parent_id to get the parent's SMTP config
             if (!empty($r['parent_id'])) {
                 ident_switch::debug_log("SMTP: identity {$iid} is alias, following parent_id={$r['parent_id']}");
-                $sql = 'SELECT smtp_host, smtp_port, username, smtp_auth, smtp_username, smtp_password, password, iid FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
+                $sql = 'SELECT smtp_host, smtp_port, smtp_auth, '
+                    . IdentSwitchCredentialService::ACCOUNT_FIELDS . ' FROM '
+                    . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
                 $q = $rc->db->query($sql, $r['parent_id'], $rc->user->ID);
                 $r = $rc->db->fetch_assoc($q);
                 if (!is_array($r)) {
@@ -175,23 +201,43 @@ class IdentSwitchSwitcher
                 $iid = $r['iid'];
             }
 
-            $r['username'] = ident_switch::resolve_username($iid, $r['username']);
-
             $authMode = (int)$r['smtp_auth'];
+            $credentials = null;
+            if ($authMode !== ident_switch::SMTP_AUTH_NONE) {
+                $r['username'] = ident_switch::resolve_username($iid, $r['username']);
+                $credentials = $this->resolveCredentials(
+                    $r,
+                    \SizeStation\Roundcube\Credentials\CredentialPurpose::Smtp,
+                );
+                if ($credentials === null) {
+                    return $args;
+                }
+            }
             if ($authMode === ident_switch::SMTP_AUTH_CUSTOM) {
-                $args['smtp_user'] = $r['smtp_username'] ?: '';
-                $args['smtp_pass'] = $r['smtp_password'] ? ($rc->decrypt($r['smtp_password']) ?: '') : '';
+                $args['smtp_user'] = $credentials->smtpUsername();
+                $args['smtp_pass'] = $credentials->smtpPassword();
             } elseif ($authMode === ident_switch::SMTP_AUTH_IMAP) {
-                $args['smtp_user'] = $r['username'];
-                $args['smtp_pass'] = $rc->decrypt($r['password']) ?: '';
+                $args['smtp_user'] = $credentials->imapUsername();
+                $args['smtp_pass'] = $credentials->imapPassword();
             } else {
                 $args['smtp_user'] = '';
                 $args['smtp_pass'] = '';
             }
 
             // Host already contains scheme (ssl:// or tls://) from form
-            $smtpHost = $r['smtp_host'] ?: 'localhost';
-            $smtpPort = $r['smtp_port'] ?: 587;
+            $smtpHost = $this->credentials->isManaged($r)
+                ? $rc->config->get('ident_switch.managed_smtp_host')
+                : $r['smtp_host'];
+            $smtpPort = $this->credentials->isManaged($r)
+                ? $rc->config->get('ident_switch.managed_smtp_port')
+                : $r['smtp_port'];
+            $smtpHost = $smtpHost ?: 'localhost';
+            $smtpPort = $smtpPort ?: 587;
+            if ($this->credentials->isManaged($r) && !$this->validManagedEndpoint($smtpHost, $smtpPort)) {
+                $this->managedEndpointError((int) $r['iid'], 'SMTP');
+
+                return $args;
+            }
             $args['smtp_host'] = $smtpHost . ':' . $smtpPort;
 
             $authLabel = match ($authMode) {
@@ -224,14 +270,17 @@ class IdentSwitchSwitcher
 
         $rc = rcmail::get_instance();
 
-        $sql = 'SELECT parent_id, sieve_host, sieve_port, sieve_auth, sieve_username, sieve_password, username, password, iid FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE iid = ? AND user_id = ?';
+        $sql = 'SELECT sieve_host, sieve_port, sieve_auth, ' . IdentSwitchCredentialService::ACCOUNT_FIELDS
+            . ' FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE iid = ? AND user_id = ?';
         $q = $rc->db->query($sql, $iid, $rc->user->ID);
         $r = $rc->db->fetch_assoc($q);
         if (is_array($r)) {
             // If this is an alias, follow parent_id to get the parent's Sieve config
             if (!empty($r['parent_id'])) {
                 ident_switch::debug_log("Sieve: identity {$iid} is alias, following parent_id={$r['parent_id']}");
-                $sql = 'SELECT sieve_host, sieve_port, sieve_auth, sieve_username, sieve_password, username, password, iid FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
+                $sql = 'SELECT sieve_host, sieve_port, sieve_auth, '
+                    . IdentSwitchCredentialService::ACCOUNT_FIELDS . ' FROM '
+                    . $rc->db->table_name(ident_switch::TABLE) . ' WHERE id = ? AND user_id = ?';
                 $q = $rc->db->query($sql, $r['parent_id'], $rc->user->ID);
                 $r = $rc->db->fetch_assoc($q);
                 if (!is_array($r)) {
@@ -241,23 +290,37 @@ class IdentSwitchSwitcher
                 $iid = $r['iid'];
             }
 
-            if (empty($r['sieve_host'])) {
+            $sieveHost = $this->credentials->isManaged($r)
+                ? $rc->config->get('ident_switch.managed_sieve_host')
+                : $r['sieve_host'];
+            if (empty($sieveHost)) {
                 return $args;
             }
 
-            $r['username'] = ident_switch::resolve_username($iid, $r['username']);
-
-            $sieveHost = $r['sieve_host'];
-            $sievePort = $r['sieve_port'] ?: 4190;
+            $sievePort = $this->credentials->isManaged($r)
+                ? $rc->config->get('ident_switch.managed_sieve_port')
+                : $r['sieve_port'];
+            $sievePort = $sievePort ?: 4190;
             $args['host'] = $sieveHost . ':' . $sievePort;
 
             $authMode = (int)$r['sieve_auth'];
+            $credentials = null;
+            if ($authMode !== ident_switch::SIEVE_AUTH_NONE) {
+                $r['username'] = ident_switch::resolve_username($iid, $r['username']);
+                $credentials = $this->resolveCredentials(
+                    $r,
+                    \SizeStation\Roundcube\Credentials\CredentialPurpose::Sieve,
+                );
+                if ($credentials === null) {
+                    return $args;
+                }
+            }
             if ($authMode === ident_switch::SIEVE_AUTH_CUSTOM) {
-                $args['user'] = $r['sieve_username'] ?: '';
-                $args['password'] = $r['sieve_password'] ? ($rc->decrypt($r['sieve_password']) ?: '') : '';
+                $args['user'] = $credentials->sieveUsername();
+                $args['password'] = $credentials->sievePassword();
             } elseif ($authMode === ident_switch::SIEVE_AUTH_IMAP) {
-                $args['user'] = $r['username'];
-                $args['password'] = $rc->decrypt($r['password']) ?: '';
+                $args['user'] = $credentials->imapUsername();
+                $args['password'] = $credentials->imapPassword();
             } else {
                 $args['user'] = '';
                 $args['password'] = '';
@@ -407,5 +470,40 @@ class IdentSwitchSwitcher
             unset($counts[$iid]['baseline']);
             $_SESSION['ident_switch_counts'] = $counts;
         }
+    }
+
+    /**
+     * @param array<string, mixed> $account
+     */
+    private function resolveCredentials(
+        array $account,
+        \SizeStation\Roundcube\Credentials\CredentialPurpose $purpose,
+    ): ?\SizeStation\Roundcube\Credentials\AccountCredentials
+    {
+        try {
+            return $this->credentials->resolve($account, $purpose);
+        } catch (\SizeStation\Roundcube\Credentials\Exception\CredentialException $exception) {
+            ident_switch::write_log(
+                "Credential resolution failed for identity {$account['iid']}: {$exception->errorCode}",
+            );
+            rcmail::get_instance()->output->show_message('ident_switch.err.credential', 'error');
+
+            return null;
+        }
+    }
+
+    private function validManagedEndpoint(mixed $host, mixed $port): bool
+    {
+        return is_string($host)
+            && preg_match('/\A(?:ssl|tls):\/\/[A-Za-z0-9.-]+\z/', $host) === 1
+            && is_numeric($port)
+            && (int) $port > 0
+            && (int) $port <= 65535;
+    }
+
+    private function managedEndpointError(int $identityId, string $protocol): void
+    {
+        ident_switch::write_log("Managed {$protocol} endpoint is invalid for identity {$identityId}.");
+        rcmail::get_instance()->output->show_message('ident_switch.err.credential', 'error');
     }
 }

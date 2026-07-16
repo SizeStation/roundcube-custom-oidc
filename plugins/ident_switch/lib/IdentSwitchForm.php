@@ -21,15 +21,17 @@ class IdentSwitchForm
     private const PASSWORD_SENTINEL = '__IDENT_SWITCH_UNCHANGED__';
 
     private ident_switch $plugin;
+    private IdentSwitchCredentialService $credentials;
 
     /**
      * Constructor.
      *
      * @param ident_switch $plugin Parent plugin instance.
      */
-    public function __construct(ident_switch $plugin)
+    public function __construct(ident_switch $plugin, IdentSwitchCredentialService $credentials)
     {
         $this->plugin = $plugin;
+        $this->credentials = $credentials;
     }
 
     /**
@@ -60,7 +62,9 @@ class IdentSwitchForm
         }
 
         // Only offer "Separate account" when domain is allowed
-        if ($domainAllowed) {
+        $managedOnly = (bool) $rc->config->get('ident_switch.managed_only', false);
+        $editingSeparate = ($record["{$prefix}mode"] ?? null) === 'separate';
+        if ($domainAllowed && (!$managedOnly || $editingSeparate)) {
             $modeSelect->add($this->plugin->gettext('form.common.mode.separate'), 'separate');
         }
 
@@ -692,6 +696,19 @@ class IdentSwitchForm
             $preconfig->apply($record);
         }
 
+        if ($this->credentials->isManaged($row)) {
+            $rc->output->set_env('ident_switch_managed_account', true);
+            $args['form']['ident_switch.managed'] = [
+                'name' => $this->plugin->gettext('managed.title'),
+                'content' => html::div(
+                    ['class' => 'boxinformation ident-switch-managed'],
+                    rcube::Q($this->plugin->gettext('managed.notice')),
+                ),
+            ];
+
+            return $args;
+        }
+
         // Restore POST values when form is re-displayed after a save error
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->restore_post_values($record);
@@ -751,6 +768,19 @@ class IdentSwitchForm
     public function on_identity_update(array $args): array
     {
         $rc = rcmail::get_instance();
+        $account = $this->credentials->accountByIdentity((int) $args['id']);
+
+        if ($this->credentials->isManaged($account)) {
+            $sql = 'SELECT email FROM ' . $rc->db->table_name('identities')
+                . ' WHERE identity_id = ? AND user_id = ?';
+            $query = $rc->db->query($sql, $args['id'], $rc->user->ID);
+            $identity = $rc->db->fetch_assoc($query);
+            if (is_array($identity)) {
+                $args['record']['email'] = $identity['email'];
+            }
+
+            return $args;
+        }
 
         // Do not do anything for default identity
         if (strcasecmp($args['record']['email'], $rc->user->data['username']) === 0) {
@@ -758,6 +788,10 @@ class IdentSwitchForm
         }
 
         $mode = self::get_field_value('common', 'mode', false) ?? 'primary';
+
+        if ($account === null && $rc->config->get('ident_switch.managed_only', false) && $mode === 'separate') {
+            return $this->managedOnlyError($args);
+        }
 
         // Block separate mode for non-preconfigured domains (alias and primary are always allowed)
         if (!$this->is_domain_allowed($args['record']['email']) && $mode === 'separate') {
@@ -825,6 +859,10 @@ class IdentSwitchForm
         }
 
         $mode = self::get_field_value('common', 'mode', false) ?? 'primary';
+
+        if ($rc->config->get('ident_switch.managed_only', false) && $mode === 'separate') {
+            return $this->managedOnlyError($args);
+        }
 
         // Block separate mode for non-preconfigured domains (alias and primary are always allowed)
         if (!$this->is_domain_allowed($args['record']['email']) && $mode === 'separate') {
@@ -918,12 +956,32 @@ class IdentSwitchForm
     {
         $rc = rcmail::get_instance();
 
+        if ($this->credentials->isManaged($this->credentials->accountByIdentity((int) $args['id']))) {
+            $this->plugin->add_texts('localization');
+            $args['abort'] = true;
+            $args['result'] = false;
+            $args['message'] = 'ident_switch.err.managed';
+
+            return $args;
+        }
+
         $sql = 'DELETE FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE iid = ? AND user_id = ?';
         $q = $rc->db->query($sql, $args['id'], $rc->user->ID);
 
         if ($rc->db->affected_rows($q)) {
             ident_switch::write_log("Deleted associated information for identity with ID = {$args['id']}.");
         }
+
+        return $args;
+    }
+
+    /** @param array<string, mixed> $args */
+    private function managedOnlyError(array $args): array
+    {
+        $this->plugin->add_texts('localization');
+        $args['abort'] = true;
+        $args['result'] = false;
+        $args['message'] = 'ident_switch.err.managed_only';
 
         return $args;
     }

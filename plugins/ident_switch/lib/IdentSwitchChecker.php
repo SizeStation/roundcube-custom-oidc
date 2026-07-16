@@ -15,6 +15,10 @@
  */
 class IdentSwitchChecker
 {
+    public function __construct(private readonly IdentSwitchCredentialService $credentials)
+    {
+    }
+
     /**
      * Called on each refresh cycle.
      *
@@ -112,6 +116,22 @@ class IdentSwitchChecker
     {
         $imap = new rcube_imap_generic();
 
+        if ($this->credentials->isManaged($identity)) {
+            $identity['imap_host'] = $rc->config->get('ident_switch.managed_imap_host');
+            $identity['imap_port'] = $rc->config->get('ident_switch.managed_imap_port');
+            if (
+                !is_string($identity['imap_host'])
+                || preg_match('/\A(?:ssl|tls):\/\/[A-Za-z0-9.-]+\z/', $identity['imap_host']) !== 1
+                || !is_numeric($identity['imap_port'])
+                || (int) $identity['imap_port'] < 1
+                || (int) $identity['imap_port'] > 65535
+            ) {
+                ident_switch::write_log("Managed IMAP endpoint is invalid for identity {$identity['iid']}.");
+
+                return $previousCount;
+            }
+        }
+
         $parsed = ident_switch::parse_host_scheme($identity['imap_host'] ?: 'localhost');
         $host = $parsed['host'];
         $ssl = $parsed['scheme'] ?: null;
@@ -123,10 +143,17 @@ class IdentSwitchChecker
         $def_port = ($ssl === 'ssl') ? 993 : 143;
         $port = $identity['imap_port'] ?: $def_port;
 
-        $username = $identity['username'] ?: $identity['email'];
-        $password = $rc->decrypt($identity['password']);
-        if ($password === false) {
-            ident_switch::write_log("Failed to decrypt password for identity {$identity['iid']}");
+        try {
+            $credentials = $this->credentials->resolve(
+                $identity,
+                \SizeStation\Roundcube\Credentials\CredentialPurpose::BackgroundCheck,
+            );
+            $username = $credentials->imapUsername();
+            $password = $credentials->imapPassword();
+        } catch (\SizeStation\Roundcube\Credentials\Exception\CredentialException $exception) {
+            ident_switch::write_log(
+                "Credential resolution failed for identity {$identity['iid']}: {$exception->errorCode}",
+            );
             return $previousCount;
         }
 
@@ -187,6 +214,11 @@ class IdentSwitchChecker
             'flags' => 0,
             'username' => $rc->user->data['username'],
             'password' => $_SESSION['password' . $postfix],
+            'credential_provider' => 'database',
+            'credential_reference' => null,
+            'managed_externally' => 0,
+            'managed_assignment_id' => null,
+            'id' => 'primary',
             'email' => $rc->user->data['username'],
             'label' => $_SESSION['global_alias'] ?? $primaryName ?? $rc->user->data['username'],
             'notify_basic' => null,
@@ -204,7 +236,10 @@ class IdentSwitchChecker
     private function get_checkable_identities(rcmail $rc): array
     {
         $sql = 'SELECT isw.iid, isw.imap_host, isw.imap_port, isw.flags, '
-            . 'isw.username, isw.password, isw.label, '
+            . 'isw.id, isw.username, isw.password, isw.label, '
+            . 'isw.smtp_username, isw.smtp_password, isw.sieve_username, isw.sieve_password, '
+            . 'isw.credential_provider, isw.credential_reference, '
+            . 'isw.managed_externally, isw.managed_assignment_id, '
             . 'isw.notify_basic, isw.notify_sound, isw.notify_desktop, '
             . 'ii.email '
             . 'FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' isw '

@@ -57,6 +57,19 @@ CREATE TABLE IF NOT EXISTS `ident_switch`
 		varchar(64),
 	`sieve_password`
 		varchar(255),
+	`credential_provider`
+		varchar(32)
+		NOT NULL
+		DEFAULT 'database',
+	`credential_reference`
+		varchar(512),
+	`managed_externally`
+		tinyint
+		NOT NULL
+		DEFAULT 0
+		CHECK(`managed_externally` IN (0, 1)),
+	`managed_assignment_id`
+		varchar(36),
 	`notify_check`
 		smallint
 		NOT NULL
@@ -79,6 +92,7 @@ CREATE TABLE IF NOT EXISTS `ident_switch`
 	`trash_mbox`
 		varchar(64),
 	UNIQUE KEY `user_id_label` (`user_id`, `label`),
+	UNIQUE KEY `ident_switch_managed_assignment` (`managed_assignment_id`),
 	CONSTRAINT `fk_user_id` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
 	CONSTRAINT `fk_identity_id` FOREIGN KEY (`iid`) REFERENCES `identities`(`identity_id`) ON DELETE CASCADE ON UPDATE CASCADE,
 	PRIMARY KEY(`id`),
@@ -87,4 +101,4 @@ CREATE TABLE IF NOT EXISTS `ident_switch`
 	INDEX `IX_ident_switch_parent_id`(`parent_id`)
 );
 
-INSERT INTO `system` (`name`, `value`) VALUES ('ident_switch-version', '2026021000');
+INSERT INTO `system` (`name`, `value`) VALUES ('ident_switch-version', '2026071600');

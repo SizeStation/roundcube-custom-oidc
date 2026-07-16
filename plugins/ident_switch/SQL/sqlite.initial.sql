@@ -58,6 +58,20 @@ CREATE TABLE ident_switch
 		varchar(64),
 	sieve_password
 		varchar(255),
+	credential_provider
+		varchar(32)
+		NOT NULL
+		DEFAULT 'database',
+	credential_reference
+		varchar(512),
+	managed_externally
+		integer
+		NOT NULL
+		DEFAULT 0
+		CHECK(managed_externally IN (0, 1)),
+	managed_assignment_id
+		varchar(36)
+		UNIQUE,
 	notify_check
 		smallint
 		NOT NULL
@@ -85,4 +99,4 @@ CREATE INDEX IX_ident_switch_user_id ON ident_switch(user_id);
 CREATE INDEX IX_ident_switch_iid ON ident_switch(iid);
 CREATE INDEX IX_ident_switch_parent_id ON ident_switch(parent_id);
 
-INSERT INTO system (name, value) VALUES ('ident_switch-version', '2026021000');
+INSERT INTO system (name, value) VALUES ('ident_switch-version', '2026071600');

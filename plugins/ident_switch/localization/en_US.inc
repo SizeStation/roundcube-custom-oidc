@@ -170,3 +170,9 @@ $labels['err.smtp.connect'] = 'SMTP connection failed. Please check the server a
 
 // Sieve connection test failed.
 $labels['err.sieve.connect'] = 'Sieve connection failed. Please check the server address, port, and credentials.';
+
+$labels['managed.title'] = 'Managed account';
+$labels['managed.notice'] = 'Managed by SizeStation. Credentials and server settings are controlled by an administrator.';
+$labels['err.managed'] = 'This managed account cannot be deleted or reconfigured here.';
+$labels['err.managed_only'] = 'Additional mail accounts must be assigned by an administrator.';
+$labels['err.credential'] = 'The selected mailbox is temporarily unavailable.';
