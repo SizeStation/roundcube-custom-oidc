@@ -35,3 +35,60 @@ jobs:
           push: false
           tags: sizestation/roundcube-oidc:test
 
+  postgres-schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: roundcube
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d roundcube"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply PostgreSQL schemas
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -U postgres -d roundcube -c \
+            'CREATE TABLE system (name varchar(64) PRIMARY KEY, value text)'
+          psql -h 127.0.0.1 -U postgres -d roundcube \
+            -f plugins/ident_switch/SQL/postgres.initial.sql
+          psql -h 127.0.0.1 -U postgres -d roundcube \
+            -f plugins/sizestation_oidc/SQL/postgres.initial.sql
+          test "$(psql -h 127.0.0.1 -U postgres -d roundcube -Atc \
+            "SELECT value FROM system WHERE name='sizestation_oidc-version'")" = 2026071602
+
+  mariadb-schema:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: roundcube
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply MariaDB schemas
+        env:
+          MYSQL_PWD: root
+        run: |
+          mysql -h 127.0.0.1 -u root roundcube -e \
+            'CREATE TABLE system (name varchar(64) PRIMARY KEY, value text)'
+          mysql -h 127.0.0.1 -u root roundcube < plugins/ident_switch/SQL/mysql.initial.sql
+          mysql -h 127.0.0.1 -u root roundcube < plugins/sizestation_oidc/SQL/mysql.initial.sql
+          test "$(mysql -h 127.0.0.1 -u root -N -s roundcube -e \
+            "SELECT value FROM system WHERE name='sizestation_oidc-version'")" = 2026071602
