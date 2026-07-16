@@ -1,0 +1,88 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+define('INSTALL_PATH', rtrim((string) (getenv('ROUNDCUBE_PATH') ?: '/var/www/html'), '/') . '/');
+require_once INSTALL_PATH . 'program/include/clisetup.php';
+require_once '/opt/sizestation/vendor/autoload.php';
+
+if (in_array($_SERVER['argv'][1] ?? 'help', ['help', '--help', '-h'], true)) {
+    fwrite(STDOUT, \SizeStation\Roundcube\Oidc\Cli\Application::usage());
+    exit(0);
+}
+
+$rcmail = rcmail::get_instance();
+$pluginConfig = INSTALL_PATH . 'plugins/sizestation_oidc/config.inc.php';
+if (is_file($pluginConfig)) {
+    $rcmail->config->load_from_file($pluginConfig);
+}
+
+$required = static function (string $key) use ($rcmail): string {
+    $value = $rcmail->config->get($key);
+    if (!is_string($value) || trim($value) === '') {
+        throw new RuntimeException("Required configuration {$key} is missing");
+    }
+
+    return trim($value);
+};
+
+try {
+    $runtimeConfig = new \SizeStation\Roundcube\Credentials\OpenBao\OpenBaoClientConfig(
+        $required('sizestation_oidc.openbao_address'),
+        $required('sizestation_oidc.openbao_token_file'),
+        (string) $rcmail->config->get('sizestation_oidc.openbao_kv_mount', 'kv'),
+        (string) $rcmail->config->get('sizestation_oidc.openbao_base_path', 'roundcube/mailboxes'),
+        $required('sizestation_oidc.openbao_ca_file'),
+        (int) $rcmail->config->get('sizestation_oidc.openbao_connect_timeout_seconds', 2),
+        (int) $rcmail->config->get('sizestation_oidc.openbao_request_timeout_seconds', 5),
+    );
+    $provisioningConfig = new \SizeStation\Roundcube\Credentials\OpenBao\OpenBaoClientConfig(
+        (string) $rcmail->config->get('sizestation_oidc.openbao_provisioning_address', $runtimeConfig->address),
+        $required('sizestation_oidc.openbao_provisioning_token_file'),
+        (string) $rcmail->config->get('sizestation_oidc.openbao_provisioning_kv_mount', $runtimeConfig->kvMount),
+        (string) $rcmail->config->get('sizestation_oidc.openbao_provisioning_base_path', $runtimeConfig->basePath),
+        (string) $rcmail->config->get('sizestation_oidc.openbao_provisioning_ca_file', $runtimeConfig->caFile),
+        (int) $rcmail->config->get('sizestation_oidc.openbao_connect_timeout_seconds', 2),
+        (int) $rcmail->config->get('sizestation_oidc.openbao_request_timeout_seconds', 5),
+    );
+    $resolver = new \SizeStation\Roundcube\Oidc\Service\AnchorCredentialResolver(
+        new \SizeStation\Roundcube\Credentials\Provider\OpenBaoCredentialProvider(
+            new \SizeStation\Roundcube\Credentials\OpenBao\OpenBaoKvV2Client($runtimeConfig),
+        ),
+    );
+    $validateImap = (bool) $rcmail->config->get('sizestation_oidc.validate_imap_on_provision', true);
+    $validateSmtp = (bool) $rcmail->config->get('sizestation_oidc.validate_smtp_on_provision', true);
+    $validator = null;
+    if ($validateImap || $validateSmtp) {
+        $validator = new \SizeStation\Roundcube\Oidc\Provisioning\MailboxCredentialValidator(
+            (string) $rcmail->config->get(
+                'sizestation_oidc.validation_imap_endpoint',
+                'ssl://imap.purelymail.com:993',
+            ),
+            (string) $rcmail->config->get(
+                'sizestation_oidc.validation_smtp_endpoint',
+                'ssl://smtp.purelymail.com:465',
+            ),
+            (int) $rcmail->config->get('sizestation_oidc.validation_timeout_seconds', 10),
+        );
+    }
+    $application = new \SizeStation\Roundcube\Oidc\Cli\Application(
+        $rcmail->db,
+        new \SizeStation\Roundcube\Oidc\Provisioning\OpenBaoKvV2Provisioner($provisioningConfig),
+        static fn (array $assignment): \SizeStation\Roundcube\Credentials\AccountCredentials =>
+            $resolver->resolve($assignment),
+        $validator,
+        $validateImap,
+        $validateSmtp,
+    );
+    exit($application->run(
+        $_SERVER['argv'],
+        STDIN,
+        static fn (string $output) => fwrite(STDOUT, $output),
+        static fn (string $output) => fwrite(STDERR, $output),
+    ));
+} catch (\Throwable) {
+    fwrite(STDERR, "ok=false\nerror_code='bootstrap_failed'\n");
+    exit(1);
+}

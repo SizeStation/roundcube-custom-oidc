@@ -27,3 +27,13 @@ $config['sizestation_oidc.openbao_base_path'] = 'roundcube/mailboxes';
 $config['sizestation_oidc.openbao_ca_file'] = '/run/app-secrets/openbao-ca.pem';
 $config['sizestation_oidc.openbao_connect_timeout_seconds'] = 2;
 $config['sizestation_oidc.openbao_request_timeout_seconds'] = 5;
+
+// The provisioning token is mounted only into an administrative CLI task,
+// never into the long-running Roundcube web service.
+$config['sizestation_oidc.openbao_provisioning_token_file'] =
+    '/run/admin-secrets/openbao-provisioning-token';
+$config['sizestation_oidc.validate_imap_on_provision'] = true;
+$config['sizestation_oidc.validate_smtp_on_provision'] = true;
+$config['sizestation_oidc.validation_imap_endpoint'] = 'ssl://imap.purelymail.com:993';
+$config['sizestation_oidc.validation_smtp_endpoint'] = 'ssl://smtp.purelymail.com:465';
+$config['sizestation_oidc.validation_timeout_seconds'] = 10;
