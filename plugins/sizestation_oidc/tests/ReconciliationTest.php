@@ -12,6 +12,7 @@ use SizeStation\Roundcube\Oidc\Reconciliation\RecoverableMaterializationExceptio
 use SizeStation\Roundcube\Oidc\Repository\AssignmentRepository;
 use SizeStation\Roundcube\Oidc\Repository\PrincipalRepository;
 use SizeStation\Roundcube\Oidc\Service\LoginFinalizer;
+use SizeStation\Roundcube\Oidc\Service\ActiveManagedAssignmentGuard;
 
 #[RequiresPhpExtension('pdo_sqlite')]
 final class ReconciliationTest extends TestCase
@@ -75,6 +76,23 @@ final class ReconciliationTest extends TestCase
         self::assertSame(1, $second->updated);
         self::assertSame(1, (int) $this->database->pdo->query('SELECT COUNT(*) FROM ident_switch')->fetchColumn());
         self::assertSame(1, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
+    }
+
+    public function testActiveManagedAssignmentGuardRequiresReturnAfterAdministrativeDisable(): void
+    {
+        $assignments = new AssignmentRepository($this->database);
+        $bound = $assignments->bindPending($this->principalId, 'https://issuer.example', 'external-1');
+        (new AssignmentReconciler($this->database))->reconcile($this->principalId, 10, $bound);
+        $record = $this->database->pdo->query(
+            'SELECT iid, managed_assignment_id FROM ident_switch',
+        )->fetch(PDO::FETCH_ASSOC);
+        $guard = new ActiveManagedAssignmentGuard($this->database);
+
+        self::assertFalse($guard->mustReturnToAnchor(10, (int) $record['iid']));
+        (new \SizeStation\Roundcube\Oidc\Repository\AdminRepository($this->database))
+            ->disableAssignment((string) $record['managed_assignment_id']);
+        self::assertTrue($guard->mustReturnToAnchor(10, (int) $record['iid']));
+        self::assertFalse($guard->mustReturnToAnchor(999, (int) $record['iid']));
     }
 
     public function testReconciliationRepairsManagedAuthenticationAndNotificationDrift(): void

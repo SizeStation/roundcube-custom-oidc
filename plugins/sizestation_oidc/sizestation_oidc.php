@@ -50,6 +50,9 @@ class sizestation_oidc extends rcube_plugin
         if ($task !== 'login' && !$this->validateEstablishedSession()) {
             return ['task' => 'login', 'action' => ''];
         }
+        if ($task !== 'login' && $this->returnFromDisabledManagedAssignment()) {
+            return $args;
+        }
         if ($task === 'mail') {
             $this->performPendingPreferredSwitch();
 
@@ -481,6 +484,39 @@ class sizestation_oidc extends rcube_plugin
         } catch (\Throwable $exception) {
             $this->failSafely('preferred_switch_failed', $exception, false);
         }
+    }
+
+    private function returnFromDisabledManagedAssignment(): bool
+    {
+        $activeIdentityId = $_SESSION['iid' . (defined('ident_switch::MY_POSTFIX')
+            ? ident_switch::MY_POSTFIX
+            : '_iswitch')] ?? null;
+        if (!is_int($activeIdentityId) && !(is_string($activeIdentityId) && ctype_digit($activeIdentityId))) {
+            return false;
+        }
+        $rc = rcmail::get_instance();
+        $mustReturn = (new \SizeStation\Roundcube\Oidc\Service\ActiveManagedAssignmentGuard($rc->db))
+            ->mustReturnToAnchor((int) $rc->user->ID, (int) $activeIdentityId);
+        if (!$mustReturn) {
+            return false;
+        }
+        try {
+            if (!class_exists('IdentSwitchSwitcher')) {
+                throw new \RuntimeException('The account switcher is unavailable');
+            }
+            $switcher = new IdentSwitchSwitcher(new IdentSwitchCredentialService($rc));
+            if (!$switcher->switchAccountById(-1, false)) {
+                throw new \RuntimeException('Unable to return to the anchor mailbox');
+            }
+            $rc->output->show_message($this->gettext('secondaryunavailable'), 'warning');
+            $rc->output->redirect(['_task' => 'mail', '_mbox' => 'INBOX']);
+        } catch (\Throwable $exception) {
+            $this->failSafely('disabled_active_assignment', $exception, false);
+            $rc->kill_session();
+            $rc->output->redirect(['_task' => 'login']);
+        }
+
+        return true;
     }
 
     private function flow(): \SizeStation\Roundcube\Oidc\Oidc\OidcFlowService
