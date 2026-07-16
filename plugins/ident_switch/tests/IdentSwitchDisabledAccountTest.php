@@ -22,10 +22,27 @@ namespace {
         {
             private static self $instance;
             public object $user;
+            public object $session;
+            public object $output;
 
             public function __construct(public rcube_db $db, public object $config)
             {
                 $this->user = (object) ['ID' => 10, 'data' => ['username' => 'anchor@example.test']];
+                $this->session = new class {
+                    public function remove(string $key): void
+                    {
+                        unset($_SESSION[$key]);
+                    }
+                };
+                $this->output = new class {
+                    public function redirect(array $target): void
+                    {
+                    }
+
+                    public function show_message(string $message, string $type): void
+                    {
+                    }
+                };
                 self::$instance = $this;
             }
 
@@ -38,6 +55,19 @@ namespace {
             {
                 return $password;
             }
+
+            public function encrypt(string $password): string
+            {
+                return 'encrypted:' . $password;
+            }
+        }
+    }
+
+    if (!class_exists('rcube_storage', false)) {
+        final class rcube_storage
+        {
+            /** @var list<string> */
+            public static array $folder_types = ['drafts', 'sent', 'junk', 'trash'];
         }
     }
 
@@ -46,6 +76,7 @@ namespace {
         {
             public const TABLE = 'ident_switch';
             public const DB_ENABLED = 1;
+            public const DB_SECURE_IMAP_TLS = 2;
             public const MY_POSTFIX = '_ident_switch';
             public const SMTP_AUTH_NONE = 0;
             public const SMTP_AUTH_IMAP = 1;
@@ -166,6 +197,37 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
 
             self::assertFalse($switcher->switchAccountById(2, false));
             self::assertSame($before, $_SESSION);
+        }
+
+        public function testSuccessfulSecondarySwitchAndMailboxOnlyReturnPreserveOidcSession(): void
+        {
+            $this->insertAccount(2, 102, 1, 0);
+            $_SESSION = [
+                'username' => 'anchor@example.test',
+                'password' => 'encrypted-anchor-secret',
+                'storage_host' => 'imap.anchor.example',
+                'storage_port' => 993,
+                'storage_ssl' => 'ssl',
+                'imap_delimiter' => '/',
+                'sizestation_oidc.identity' => ['principal_id' => 77, 'subject' => 'subject-1'],
+            ];
+            $switcher = new \IdentSwitchSwitcher(new \IdentSwitchCredentialService($this->roundcube));
+
+            self::assertTrue($switcher->switchAccountById(2, false));
+            self::assertSame('mailbox@example.test', $_SESSION['username']);
+            self::assertSame('encrypted:encrypted', $_SESSION['password']);
+            self::assertSame(102, (int) $_SESSION['iid' . \ident_switch::MY_POSTFIX]);
+            self::assertSame(77, $_SESSION['sizestation_oidc.identity']['principal_id']);
+
+            self::assertTrue($switcher->switchAccountById(-1, false));
+            self::assertSame('anchor@example.test', $_SESSION['username']);
+            self::assertSame('encrypted-anchor-secret', $_SESSION['password']);
+            self::assertSame('imap.anchor.example', $_SESSION['storage_host']);
+            self::assertSame(-1, $_SESSION['iid' . \ident_switch::MY_POSTFIX]);
+            self::assertSame(
+                ['principal_id' => 77, 'subject' => 'subject-1'],
+                $_SESSION['sizestation_oidc.identity'],
+            );
         }
 
         public function testDisabledManagedAccountStillCannotBeDeletedFromSettings(): void
