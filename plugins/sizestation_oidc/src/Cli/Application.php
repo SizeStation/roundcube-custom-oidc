@@ -7,7 +7,9 @@ namespace SizeStation\Roundcube\Oidc\Cli;
 use Closure;
 use RuntimeException;
 use SizeStation\Roundcube\Credentials\AccountCredentials;
+use SizeStation\Roundcube\Credentials\Exception\ExternalCredentialException;
 use SizeStation\Roundcube\Credentials\OpenBao\CredentialReference;
+use SizeStation\Roundcube\Oidc\Domain\MailboxAddress;
 use SizeStation\Roundcube\Oidc\Audit\AuditEvent;
 use SizeStation\Roundcube\Oidc\Provisioning\MailboxCredentialValidator;
 use SizeStation\Roundcube\Oidc\Provisioning\SecretProvisionerInterface;
@@ -82,6 +84,7 @@ final class Application
         $preferred = !empty($options['preferred']);
         $dryRun = !empty($options['dry-run']);
         $username = is_string($options['username'] ?? null) ? $options['username'] : $mailbox;
+        $this->assertMailboxUsername($mailbox, $username);
         $password = $this->password($options, $stdin);
         try {
             $credentials = new AccountCredentials($username, $password);
@@ -105,6 +108,10 @@ final class Application
                 $this->provisioner->write($reference, ['username' => $username, 'password' => $password]);
                 $repository->markCredentialStatus((string) $assignment['id'], 'valid');
             } catch (\Throwable $exception) {
+                try {
+                    $this->provisioner->delete($reference);
+                } catch (\Throwable) {
+                }
                 $repository->deleteAssignmentForRollback((string) $assignment['id']);
                 throw $exception;
             }
@@ -140,6 +147,7 @@ final class Application
         $username = is_string($options['username'] ?? null)
             ? $options['username']
             : (string) $assignment['mailbox_address'];
+        $this->assertMailboxUsername((string) $assignment['mailbox_address'], $username);
         $password = $this->password($options, $stdin);
         try {
             $credentials = new AccountCredentials($username, $password);
@@ -173,24 +181,33 @@ final class Application
             return ['ok' => true, 'dry_run' => true, 'command' => 'validate', 'assignment_id' => $assignment['id']];
         }
         $repository = new AdminRepository($this->database);
+        $credentials = null;
         try {
             $credentials = ($this->credentialResolver)($assignment);
             $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
-            $credentials->erase();
             $repository->markCredentialStatus((string) $assignment['id'], 'valid');
             $event = AuditEvent::CredentialValidationSuccess;
             $status = 'valid';
         } catch (\Throwable $exception) {
-            $repository->markCredentialStatus((string) $assignment['id'], 'invalid', 'credential_validation_failed');
+            $status = $exception instanceof ExternalCredentialException
+                && $exception->kind !== \SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind::Invalid
+                    ? 'unavailable'
+                    : 'invalid';
+            $errorCode = $exception instanceof ExternalCredentialException
+                ? $exception->errorCode
+                : 'credential_validation_failed';
+            $repository->markCredentialStatus((string) $assignment['id'], $status, $errorCode);
             $this->auditRepository()->record(
                 AuditEvent::CredentialValidationFailure,
                 'cli',
                 'administrator',
                 $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
                 (string) $assignment['id'],
-                ['error_code' => 'credential_validation_failed'],
+                ['error_code' => $errorCode],
             );
             throw $exception;
+        } finally {
+            $credentials?->erase();
         }
         $this->auditRepository()->record(
             $event,
@@ -234,14 +251,14 @@ final class Application
         if (!empty($options['dry-run'])) {
             return ['ok' => true, 'dry_run' => true, 'command' => 'remove', 'assignment_id' => $assignment['id']];
         }
+        $removed = (new AdminRepository($this->database))->removeAssignment((string) $assignment['id']);
         $this->auditRepository()->record(
             AuditEvent::AssignmentRemoved,
             'cli',
             'administrator',
-            $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
-            (string) $assignment['id'],
+            $removed['principal_id'] === null ? null : (int) $removed['principal_id'],
+            (string) $removed['id'],
         );
-        $removed = (new AdminRepository($this->database))->removeAssignment((string) $assignment['id']);
         if (!empty($options['delete-secret'])) {
             $this->provisioner->delete(new CredentialReference((string) $removed['credential_reference']));
         }
@@ -308,7 +325,32 @@ final class Application
                 $results[] = ['principal_id' => (int) $principal['id'], 'status' => 'dry-run'];
                 continue;
             }
-            $result = $this->reconcilePrincipal($principal);
+            $id = (int) $principal['id'];
+            $this->auditRepository()->record(AuditEvent::ReconciliationStarted, 'cli', 'administrator', $id);
+            try {
+                $result = $this->reconcilePrincipal($principal);
+                $this->auditRepository()->record(
+                    AuditEvent::ReconciliationCompleted,
+                    'cli',
+                    'administrator',
+                    $id,
+                    metadata: [
+                        'created' => $result->created,
+                        'updated' => $result->updated,
+                        'disabled' => $result->disabled,
+                        'orphaned' => $result->orphaned,
+                    ],
+                );
+            } catch (\Throwable $exception) {
+                $this->auditRepository()->record(
+                    AuditEvent::ReconciliationFailed,
+                    'cli',
+                    'administrator',
+                    $id,
+                    metadata: ['error_code' => 'reconciliation_failed'],
+                );
+                throw $exception;
+            }
             $results[] = [
                 'principal_id' => (int) $principal['id'],
                 'created' => $result->created,
@@ -492,6 +534,15 @@ final class Application
             sodium_memzero($value);
         }
         $value = '';
+    }
+
+    private function assertMailboxUsername(string $mailbox, string $username): void
+    {
+        $expected = (string) new MailboxAddress($mailbox);
+        $actual = (string) new MailboxAddress($username);
+        if (!hash_equals($expected, $actual)) {
+            throw new RuntimeException('Managed credential username must match the assignment mailbox');
+        }
     }
 
     public static function usage(): string

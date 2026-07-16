@@ -92,6 +92,51 @@ final class CliApplicationTest extends TestCase
         self::assertStringContainsString('operation_rejected', $stderr);
     }
 
+    public function testProvisionRejectsCredentialUsernameThatDiffersFromMailbox(): void
+    {
+        [$exit, $stdout, $stderr] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--username=other@example.test',
+            '--credential-reference=mailboxes/anchor',
+            '--anchor',
+            '--password-stdin',
+            '--json',
+        ], "top-secret\n");
+
+        self::assertSame(1, $exit);
+        self::assertSame('', $stdout);
+        self::assertStringContainsString('operation_rejected', $stderr);
+        self::assertSame([], $this->provisioner->writes);
+    }
+
+    public function testProvisioningFailureDeletesSecretAndRollsBackAssignment(): void
+    {
+        $this->provisioner->throwAfterWrite = true;
+        [$exit, $stdout, $stderr] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor',
+            '--anchor',
+            '--password-stdin',
+            '--json',
+        ], "top-secret\n");
+
+        self::assertSame(1, $exit);
+        self::assertSame('', $stdout);
+        self::assertStringContainsString('operation_failed', $stderr);
+        self::assertSame(['mailboxes/anchor'], $this->provisioner->deletes);
+        self::assertSame(0, (int) $this->database->pdo->query(
+            'SELECT COUNT(*) FROM sizestation_mailbox_assignments',
+        )->fetchColumn());
+    }
+
     /** @param list<string> $arguments
      *  @return array{int, string, string}
      */

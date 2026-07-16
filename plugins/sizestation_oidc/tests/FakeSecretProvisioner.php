@@ -13,10 +13,14 @@ final class FakeSecretProvisioner implements SecretProvisionerInterface
     public array $writes = [];
     /** @var list<string> */
     public array $deletes = [];
+    public bool $throwAfterWrite = false;
 
     public function write(CredentialReference $reference, array $secret): void
     {
         $this->writes[$reference->value] = $secret;
+        if ($this->throwAfterWrite) {
+            throw new \RuntimeException('simulated provisioning failure');
+        }
     }
 
     public function delete(CredentialReference $reference): void
