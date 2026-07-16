@@ -9,6 +9,18 @@ $readSecret = static function (string $path): string {
 
     return trim($value);
 };
+$envOrFile = static function (string $name, string $default = '') use ($readSecret): string {
+    $value = trim((string) getenv($name));
+    $file = trim((string) getenv($name . '_FILE'));
+    if ($value !== '' && $file !== '') {
+        throw new RuntimeException("Set either {$name} or {$name}_FILE, not both");
+    }
+    if ($file !== '') {
+        return $readSecret($file);
+    }
+
+    return $value !== '' ? $value : $default;
+};
 
 $config['des_key'] = $readSecret('/run/app-secrets/roundcube-des-key');
 $config['plugins'] = array_values(array_unique(array_merge(
@@ -30,12 +42,21 @@ $config['proxy_whitelist'] = $proxyWhitelist === ''
     : array_values(array_filter(array_map('trim', explode(',', $proxyWhitelist))));
 
 $config['sizestation_oidc.enabled'] = true;
-$config['sizestation_oidc.issuer'] = 'https://auth.sizestation.cloud/application/o/roundcube/';
-$config['sizestation_oidc.client_id'] = getenv('ROUNDCUBE_OIDC_CLIENT_ID');
-$config['sizestation_oidc.client_secret_file'] = '/run/app-secrets/oidc-client-secret';
-$config['sizestation_oidc.redirect_uri'] =
-    'https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback';
-$config['sizestation_oidc.post_logout_redirect_uri'] = 'https://mail.sizestation.cloud/';
+$config['sizestation_oidc.issuer'] = $envOrFile(
+    'ROUNDCUBE_OIDC_ISSUER',
+    'https://auth.sizestation.cloud/application/o/roundcube/',
+);
+$config['sizestation_oidc.client_id'] = $envOrFile('ROUNDCUBE_OIDC_CLIENT_ID');
+$config['sizestation_oidc.client_secret_file'] =
+    $envOrFile('ROUNDCUBE_OIDC_CLIENT_SECRET_FILE', '/run/app-secrets/oidc-client-secret');
+$config['sizestation_oidc.redirect_uri'] = $envOrFile(
+    'ROUNDCUBE_OIDC_REDIRECT_URI',
+    'https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback',
+);
+$config['sizestation_oidc.post_logout_redirect_uri'] = $envOrFile(
+    'ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI',
+    'https://mail.sizestation.cloud/',
+);
 $config['sizestation_oidc.scopes'] = ['openid', 'profile', 'email', 'sizestation_user_id'];
 $config['sizestation_oidc.external_user_id_claim'] = 'sizestation_user_id';
 $config['sizestation_oidc.allowed_algorithms'] = ['RS256'];

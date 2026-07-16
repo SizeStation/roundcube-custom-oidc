@@ -30,7 +30,11 @@ services:
         done
         exec /docker-entrypoint.sh apache2-foreground
     environment:
+      ROUNDCUBE_OIDC_ISSUER: "https://auth.sizestation.cloud/application/o/roundcube/"
       ROUNDCUBE_OIDC_CLIENT_ID: "REPLACE_WITH_AUTHENTIK_CLIENT_ID"
+      ROUNDCUBE_OIDC_CLIENT_SECRET_FILE: "/run/app-secrets/oidc-client-secret"
+      ROUNDCUBE_OIDC_REDIRECT_URI: "https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback"
+      ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://mail.sizestation.cloud/"
       ROUNDCUBEMAIL_DB_TYPE: sqlite
       ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE: 25M
       # Verified current `public` overlay CIDR; update if the network is recreated.

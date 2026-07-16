@@ -37,6 +37,23 @@ bao kv put -mount=kv roundcube/oidc \
   client_secret='REPLACE_WITH_AUTHENTIK_SECRET'
 ```
 
+Roundcube's Authentik-side values are runtime configuration. The supplied PHP
+config accepts each non-secret value directly or from a Docker-style file:
+
+- `ROUNDCUBE_OIDC_ISSUER` or `ROUNDCUBE_OIDC_ISSUER_FILE`
+- `ROUNDCUBE_OIDC_CLIENT_ID` or `ROUNDCUBE_OIDC_CLIENT_ID_FILE`
+- `ROUNDCUBE_OIDC_REDIRECT_URI` or `ROUNDCUBE_OIDC_REDIRECT_URI_FILE`
+- `ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI` or
+  `ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI_FILE`
+- `ROUNDCUBE_OIDC_CLIENT_SECRET_FILE` is the path to the secret file rendered
+  by the Agent; the client secret itself is intentionally never accepted as an
+  environment value.
+
+If both a direct variable and its `_FILE` variant are set, startup fails closed.
+These values configure the Roundcube OIDC client; the matching provider/client
+must still exist in Authentik because an environment variable cannot create
+server-side Authentik resources.
+
 Changing the existing DES key invalidates Roundcube-encrypted data.
 Create the external Swarm `roundcube_bao_role_id` and
 `roundcube_bao_secret_id` secrets from the AppRole credentials.
@@ -50,6 +67,11 @@ docker node inspect ROUNDCUBE_NODE --format '{{ index .Spec.Labels "roundcube.se
 ```
 
 ## 2. Build and publish
+
+The custom image is the stock pinned Roundcube image with `sizestation_oidc`,
+the modified `ident_switch`, Composer dependencies, Elastic2022, CLI, and
+licence/source files added at build time. The stock image alone does not contain
+this feature.
 
 From a clean tested checkout:
 
@@ -66,6 +88,12 @@ the Authentik client-ID placeholder with the non-secret client ID. Never deploy
 a moving tag.
 
 ## 3. Back up and migrate
+
+This does not introduce a separate database service. With the supplied stack,
+"the database" is Roundcube's existing SQLite file in the `roundcube_db` volume
+at `/var/roundcube/db`. The migrations add only the two plugins' tables and
+columns to that existing Roundcube database. PostgreSQL and MariaDB migrations
+are included for installations that already use those Roundcube backends.
 
 Stop Roundcube, take a storage-level snapshot, and also copy the SQLite database
 to a timestamped backup on the server. Confirm the backup is non-empty before
