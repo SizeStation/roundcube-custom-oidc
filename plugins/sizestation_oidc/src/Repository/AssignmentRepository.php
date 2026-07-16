@@ -133,4 +133,31 @@ final class AssignmentRepository
             throw new RepositoryException('Unable to initialize anchor assignment');
         }
     }
+
+    public function markCredentialFailure(
+        string $assignmentId,
+        int $principalId,
+        string $status,
+        string $errorCode,
+    ): void {
+        if (!in_array($status, ['invalid', 'unavailable'], true)) {
+            throw new RepositoryException('Unsupported credential failure status');
+        }
+        $query = $this->database->query(
+            'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' SET credential_status = ?, last_validated_at = ?, last_error_code = ?, updated_at = ?'
+            . ' WHERE id = ? AND principal_id = ? AND enabled = ? AND is_anchor = ?',
+            $status,
+            gmdate('Y-m-d\TH:i:s\Z'),
+            substr($errorCode, 0, 64),
+            gmdate('Y-m-d\TH:i:s\Z'),
+            $assignmentId,
+            $principalId,
+            1,
+            1,
+        );
+        if (!$query || $this->database->affected_rows($query) !== 1) {
+            throw new RepositoryException('Unable to update anchor credential status');
+        }
+    }
 }

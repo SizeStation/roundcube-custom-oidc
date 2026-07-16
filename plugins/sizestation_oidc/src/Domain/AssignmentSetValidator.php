@@ -22,6 +22,10 @@ final class AssignmentSetValidator
             static fn (array $assignment): bool => !empty($assignment['is_preferred']),
         ));
 
+        if ($enabled === []) {
+            throw new NoMailboxAssignedException('No enabled mailbox assignment is available');
+        }
+
         if (count($anchors) !== 1) {
             throw new AssignmentInvariantException('Exactly one enabled anchor assignment is required');
         }

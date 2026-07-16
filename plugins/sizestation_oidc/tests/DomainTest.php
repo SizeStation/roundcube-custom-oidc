@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use SizeStation\Roundcube\Oidc\Domain\AssignmentInvariantException;
 use SizeStation\Roundcube\Oidc\Domain\AssignmentSetValidator;
 use SizeStation\Roundcube\Oidc\Domain\MailboxAddress;
+use SizeStation\Roundcube\Oidc\Domain\NoMailboxAssignedException;
 use SizeStation\Roundcube\Oidc\Domain\OpaqueId;
 
 final class DomainTest extends TestCase
@@ -40,6 +41,12 @@ final class DomainTest extends TestCase
         $validator->validateForLogin([
             ['enabled' => 1, 'is_anchor' => 0, 'is_preferred' => 0],
         ]);
+    }
+
+    public function testDistinguishesNoMailboxFromInvalidAnchorConfiguration(): void
+    {
+        $this->expectException(NoMailboxAssignedException::class);
+        (new AssignmentSetValidator())->validateForLogin([]);
     }
 
     public function testAllowsOneAnchorAndOnePreferredSecondary(): void

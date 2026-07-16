@@ -11,6 +11,7 @@ class sizestation_oidc extends rcube_plugin
     public $task = 'login|logout|mail|settings';
 
     private ?\SizeStation\Roundcube\Oidc\Service\LoginPhase $loginPhase = null;
+    private ?string $anchorFailureStatus = null;
     private ?string $logoutRedirect = null;
     /** @var array<string, mixed>|null */
     private ?array $logoutIdentity = null;
@@ -87,6 +88,11 @@ class sizestation_oidc extends rcube_plugin
             );
 
             return ['task' => 'login', 'action' => 'login'];
+        } catch (\SizeStation\Roundcube\Oidc\Domain\NoMailboxAssignedException $exception) {
+            $this->failSafely('no_mailbox_assigned', $exception, false);
+            rcmail::get_instance()->output->show_message($this->gettext('nomailboxassigned'), 'error');
+
+            return ['task' => 'login', 'action' => ''];
         } catch (\Throwable $exception) {
             $this->failSafely('oidc_callback_failed', $exception);
 
@@ -150,6 +156,34 @@ class sizestation_oidc extends rcube_plugin
         } catch (\Throwable $exception) {
             $args['valid'] = false;
             $args['abort'] = true;
+            $status = 'unavailable';
+            $errorCode = 'anchor_credentials_unavailable';
+            if ($exception instanceof \SizeStation\Roundcube\Credentials\Exception\ExternalCredentialException) {
+                $errorCode = $exception->errorCode;
+                if ($exception->kind === \SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind::Invalid) {
+                    $status = 'invalid';
+                }
+            }
+            $this->anchorFailureStatus = $status;
+            try {
+                $this->assignments()->markCredentialFailure(
+                    (string) $this->loginPhase->anchor['id'],
+                    (int) $this->loginPhase->principal['id'],
+                    $status,
+                    $errorCode,
+                );
+                $this->audit()->record(
+                    $status === 'unavailable'
+                        ? \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OpenBaoUnavailable
+                        : \SizeStation\Roundcube\Oidc\Audit\AuditEvent::CredentialValidationFailure,
+                    'system',
+                    'anchor',
+                    (int) $this->loginPhase->principal['id'],
+                    (string) $this->loginPhase->anchor['id'],
+                    ['error_code' => $errorCode],
+                );
+            } catch (\Throwable) {
+            }
             $this->failSafely('anchor_credentials_unavailable', $exception, false);
         }
 
@@ -230,6 +264,14 @@ class sizestation_oidc extends rcube_plugin
     {
         if ($this->loginPhase !== null) {
             try {
+                if ($this->anchorFailureStatus === null) {
+                    $this->assignments()->markCredentialFailure(
+                        (string) $this->loginPhase->anchor['id'],
+                        (int) $this->loginPhase->principal['id'],
+                        'invalid',
+                        'anchor_imap_authentication_failed',
+                    );
+                }
                 $this->audit()->record(
                     \SizeStation\Roundcube\Oidc\Audit\AuditEvent::OidcLoginFailure,
                     'oidc',
@@ -244,6 +286,7 @@ class sizestation_oidc extends rcube_plugin
                 // The primary failure must remain sanitized and visible even if auditing is unavailable.
             }
         }
+        $this->anchorFailureStatus = null;
         $this->loginPhase = null;
 
         return $args;

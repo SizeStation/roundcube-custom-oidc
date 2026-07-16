@@ -131,6 +131,31 @@ namespace SizeStation\Roundcube\Tests\Oidc {
             self::assertSame((int) $principal['id'], (int) $bound[0]['principal_id']);
         }
 
+        public function testAnchorCredentialFailureStateIsPersistedWithoutSecrets(): void
+        {
+            $principal = (new PrincipalRepository($this->database))->resolveOrCreate(
+                'https://issuer.example',
+                'subject-1',
+                'external-1',
+            );
+            $this->insertAnchor();
+            $repository = new AssignmentRepository($this->database);
+            $repository->bindPending((int) $principal['id'], 'https://issuer.example', 'external-1');
+
+            $repository->markCredentialFailure(
+                '00000000-0000-4000-8000-000000000001',
+                (int) $principal['id'],
+                'unavailable',
+                'openbao_forbidden',
+            );
+
+            $row = $this->database->pdo->query(
+                'SELECT credential_status, last_error_code FROM sizestation_mailbox_assignments',
+            )->fetch(PDO::FETCH_ASSOC);
+            self::assertSame('unavailable', $row['credential_status']);
+            self::assertSame('openbao_forbidden', $row['last_error_code']);
+        }
+
         public function testAuditRepositoryRedactsSecretsBeforePersistence(): void
         {
             $repository = new AuditLogRepository($this->database);
