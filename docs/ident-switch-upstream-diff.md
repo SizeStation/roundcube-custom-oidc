@@ -18,3 +18,12 @@ patches remain reviewable.
   request-local cache, sanitized error types, and legacy database provider.
 - No `ident_switch` runtime path uses the registry in this commit. This isolates
   and tests legacy decryption semantics before the switching refactor.
+
+## OpenBao provider
+
+- Added a generic OpenBao KV v2 client and `openbao` provider to the shared
+  package. It enforces an HTTPS origin, CA verification, strict timeouts,
+  validated mount/base/reference paths, no redirects, and sanitized errors.
+- The client reads the Agent token sink for each request. On a forbidden
+  response it rereads and retries exactly once to handle token rotation.
+- No upstream runtime code changed in this commit.

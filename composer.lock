@@ -12,9 +12,11 @@
             "dist": {
                 "type": "path",
                 "url": "packages/credentials",
-                "reference": "5f7c1b9a848a72b288d36ccab59347045f875ea3"
+                "reference": "2dc453ca8d03c534fabdefaa33f5cb8417280787"
             },
             "require": {
+                "ext-curl": "*",
+                "ext-json": "*",
                 "php": ">=8.2"
             },
             "type": "library",
