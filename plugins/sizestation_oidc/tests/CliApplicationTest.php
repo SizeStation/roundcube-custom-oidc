@@ -137,6 +137,139 @@ final class CliApplicationTest extends TestCase
         )->fetchColumn());
     }
 
+    public function testAdministrativeAssignmentLifecycleIsAuditedAndSecretSafe(): void
+    {
+        [, $anchorOutput] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor',
+            '--anchor',
+            '--preferred',
+            '--password-stdin',
+            '--json',
+        ], "anchor-secret\n");
+        [, $secondaryOutput] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=secondary@example.test',
+            '--credential-reference=mailboxes/secondary',
+            '--password-stdin',
+            '--json',
+        ], "secondary-secret\n");
+        $anchorId = (string) json_decode($anchorOutput, true, flags: JSON_THROW_ON_ERROR)['assignment_id'];
+        $secondaryId = (string) json_decode($secondaryOutput, true, flags: JSON_THROW_ON_ERROR)['assignment_id'];
+
+        [$rotateExit, $rotateOutput] = $this->runApplication([
+            'sizestation-oidc',
+            'rotate',
+            '--assignment-id=' . $secondaryId,
+            '--password-stdin',
+            '--json',
+        ], "rotated-secret\n");
+        self::assertSame(0, $rotateExit);
+        self::assertStringNotContainsString('rotated-secret', $rotateOutput);
+        self::assertSame('rotated-secret', $this->provisioner->writes['mailboxes/secondary']['password']);
+
+        [$validateExit, $validateOutput] = $this->runApplication([
+            'sizestation-oidc',
+            'validate',
+            '--assignment-id=' . $secondaryId,
+            '--json',
+        ], '');
+        self::assertSame(0, $validateExit);
+        self::assertStringContainsString('"credential_status":"valid"', $validateOutput);
+
+        [$preferredExit] = $this->runApplication([
+            'sizestation-oidc',
+            'set-preferred',
+            '--assignment-id=' . $secondaryId,
+            '--json',
+        ], '');
+        self::assertSame(0, $preferredExit);
+        self::assertSame(1, (int) $this->database->pdo->query(
+            "SELECT is_preferred FROM sizestation_mailbox_assignments WHERE id = '{$secondaryId}'",
+        )->fetchColumn());
+        self::assertSame(0, (int) $this->database->pdo->query(
+            "SELECT is_preferred FROM sizestation_mailbox_assignments WHERE id = '{$anchorId}'",
+        )->fetchColumn());
+
+        [$disableExit] = $this->runApplication([
+            'sizestation-oidc',
+            'disable',
+            '--assignment-id=' . $secondaryId,
+            '--json',
+        ], '');
+        self::assertSame(0, $disableExit);
+        self::assertSame('disabled', $this->database->pdo->query(
+            "SELECT materialization_status FROM sizestation_mailbox_assignments WHERE id = '{$secondaryId}'",
+        )->fetchColumn());
+
+        [$removeExit, $removeOutput] = $this->runApplication([
+            'sizestation-oidc',
+            'remove',
+            '--assignment-id=' . $secondaryId,
+            '--delete-secret',
+            '--json',
+        ], '');
+        self::assertSame(0, $removeExit);
+        self::assertStringNotContainsString('secondary-secret', $removeOutput);
+        self::assertContains('mailboxes/secondary', $this->provisioner->deletes);
+        self::assertSame('orphaned', $this->database->pdo->query(
+            "SELECT materialization_status FROM sizestation_mailbox_assignments WHERE id = '{$secondaryId}'",
+        )->fetchColumn());
+
+        $events = $this->database->pdo->query(
+            'SELECT event_type FROM sizestation_oidc_audit_log ORDER BY id',
+        )->fetchAll(PDO::FETCH_COLUMN);
+        self::assertContains('credential_rotated', $events);
+        self::assertContains('credential_validation_success', $events);
+        self::assertContains('preferred_account_changed', $events);
+        self::assertContains('assignment_disabled', $events);
+        self::assertContains('assignment_removed', $events);
+    }
+
+    public function testAnchorCannotBeDisabledOrRemovedByLifecycleCommands(): void
+    {
+        [, $output] = $this->runApplication([
+            'sizestation-oidc',
+            'provision',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor',
+            '--anchor',
+            '--password-stdin',
+            '--json',
+        ], "anchor-secret\n");
+        $anchorId = (string) json_decode($output, true, flags: JSON_THROW_ON_ERROR)['assignment_id'];
+
+        [$disableExit, , $disableError] = $this->runApplication([
+            'sizestation-oidc',
+            'disable',
+            '--assignment-id=' . $anchorId,
+            '--json',
+        ], '');
+        [$removeExit, , $removeError] = $this->runApplication([
+            'sizestation-oidc',
+            'remove',
+            '--assignment-id=' . $anchorId,
+            '--json',
+        ], '');
+
+        self::assertSame(1, $disableExit);
+        self::assertSame(1, $removeExit);
+        self::assertStringContainsString('operation_rejected', $disableError);
+        self::assertStringContainsString('operation_rejected', $removeError);
+        self::assertSame(1, (int) $this->database->pdo->query(
+            "SELECT enabled FROM sizestation_mailbox_assignments WHERE id = '{$anchorId}'",
+        )->fetchColumn());
+    }
+
     /** @param list<string> $arguments
      *  @return array{int, string, string}
      */
