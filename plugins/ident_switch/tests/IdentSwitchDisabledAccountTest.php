@@ -105,6 +105,18 @@ namespace {
                 return $value === '' ? null : $value;
             }
 
+            /** @return array{scheme: string, host: string} */
+            public static function parse_host_scheme(string $host): array
+            {
+                if (str_contains($host, '://')) {
+                    [$scheme, $hostname] = explode('://', $host, 2);
+
+                    return ['scheme' => $scheme, 'host' => $hostname];
+                }
+
+                return ['scheme' => '', 'host' => $host];
+            }
+
             public function add_texts(string $directory): void
             {
             }
