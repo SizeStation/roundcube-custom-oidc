@@ -25,7 +25,7 @@ services:
     command:
       - |
         for file in roundcube-des-key oidc-client-secret openbao-token; do
-          until [ -s "/run/app-secrets/$file" ]; do sleep 2; done
+          until [ -s "/run/app-secrets/$$file" ]; do sleep 2; done
         done
         exec /docker-entrypoint.sh apache2-foreground
     environment:
@@ -70,9 +70,9 @@ networks:
   openbao: {external: true}
 
 configs:
-  roundcube_bao_agent: {file: ./deployment/roundcube-agent.hcl}
-  roundcube_oidc_config: {file: ./deployment/roundcube-config.inc.php}
-  openbao_ca: {file: ./deployment/openbao-ca.pem.example}
+  roundcube_bao_agent: {file: ./roundcube-agent.hcl}
+  roundcube_oidc_config: {file: ./roundcube-config.inc.php}
+  openbao_ca: {file: ./openbao-ca.pem.example}
 
 secrets:
   roundcube_bao_role_id: {external: true}
