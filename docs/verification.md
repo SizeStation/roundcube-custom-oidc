@@ -18,7 +18,7 @@ Verified on 2026-07-16 through Git commit `61d12c5` and the pinned Roundcube
   dependencies installed at build time, licences included, OIDC autoload
   asserted, and CLI syntax asserted.
 - Local verification image manifest-list digest:
-  `sha256:f361f196a62c97c437379d2d9f4866a54c6ebde10b5d81828313d31a222d58b5`.
+  `sha256:59d51c29b46d8906454007948c53026ae9117d8bc33b95a0e7e4203c30af528a`.
   This is not a registry digest and must not be placed in the production stack.
 - CLI help completed through the real Roundcube Docker entrypoint.
 - The final `61d12c5` image rebuilt successfully, passed PHP syntax and CLI
