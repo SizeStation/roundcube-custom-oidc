@@ -242,6 +242,28 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
             );
         }
 
+        public function testSecondaryCredentialFailureLeavesCurrentMailboxSessionUnchanged(): void
+        {
+            $this->insertAccount(2, 102, 1, 0);
+            $this->roundcube->db->query(
+                'UPDATE ident_switch SET credential_provider = ?, managed_externally = ? WHERE id = ?',
+                'unconfigured-provider',
+                1,
+                2,
+            );
+            $_SESSION = [
+                'username' => 'anchor@example.test',
+                'password' => 'encrypted-anchor-secret',
+                'storage_host' => 'imap.anchor.example',
+                'sizestation_oidc.identity' => ['principal_id' => 77],
+            ];
+            $before = $_SESSION;
+            $switcher = new \IdentSwitchSwitcher(new \IdentSwitchCredentialService($this->roundcube));
+
+            self::assertFalse($switcher->switchAccountById(2, false));
+            self::assertSame($before, $_SESSION);
+        }
+
         public function testDisabledManagedAccountStillCannotBeDeletedFromSettings(): void
         {
             $this->roundcube->db->query(
