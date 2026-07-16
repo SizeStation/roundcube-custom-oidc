@@ -70,8 +70,8 @@ Do not deploy until the checklist below is complete:
    discovery endpoint returns 200;
 2. apply both OpenBao policies, attach the runtime policy to the Roundcube Agent
    AppRole, create the separate provisioning identity, and store the OIDC secret;
-3. build/push the exact final Git commit and replace both stack placeholders
-   with the registry digest/client ID;
+3. register the single suite on Packagist, publish the exact tested tag, and
+   replace the package-version/client-ID placeholders in the stack;
 4. back up SQLite, rehearse restore, then run both migrations;
 5. provision a non-production anchor and secondary mailbox, deploy to staging,
    and exercise the browser acceptance matrix;

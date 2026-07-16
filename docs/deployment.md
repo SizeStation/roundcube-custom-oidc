@@ -66,26 +66,32 @@ docker node update --label-add roundcube.secrets=true ROUNDCUBE_NODE
 docker node inspect ROUNDCUBE_NODE --format '{{ index .Spec.Labels "roundcube.secrets" }}'
 ```
 
-## 2. Build and publish
+## 2. Publish the single Composer package
 
-The custom image is the stock pinned Roundcube image with `sizestation_oidc`,
-the modified `ident_switch`, Composer dependencies, Elastic2022, CLI, and
-licence/source files added at build time. The stock image alone does not contain
-this feature.
+The repository root is the single package
+`sizestation/roundcube-oidc-suite`. It contains `sizestation_oidc`, the modified
+`ident_switch`, their shared credential classes, CLI, migrations, licences, and
+source notices. Register this public repository once on Packagist, then create
+an immutable Git release tag. Packagist will expose that tag as the Composer
+version; no separate packages or custom image registry are required.
 
-From a clean tested checkout:
+Before tagging:
 
 ```sh
-docker build --pull=false --build-arg VCS_REF=GIT_SHA \
-  -t ghcr.io/sizestation/roundcube-custom-oidc:GIT_SHA .
-docker push ghcr.io/sizestation/roundcube-custom-oidc:GIT_SHA
-docker inspect --format '{{index .RepoDigests 0}}' \
-  ghcr.io/sizestation/roundcube-custom-oidc:GIT_SHA
+composer validate --strict
+composer install --no-interaction
+composer test
+composer lint
+sh tests/install-suite.sh
+git tag -s v1.0.0 -m 'SizeStation Roundcube OIDC suite 1.0.0'
+git push origin v1.0.0
 ```
 
-Replace the image placeholder in `deployment/stack.yml` with that digest and
-the Authentik client-ID placeholder with the non-secret client ID. Never deploy
-a moving tag.
+Set `ROUNDCUBEMAIL_COMPOSER_PLUGINS` to that exact package version in the stack.
+The official Roundcube entrypoint installs it into `vendor`; the mounted
+post-setup task atomically copies both bundled plugins into Roundcube, installs
+the CLI, and runs both idempotent schema initializers. The task fails startup if
+the package or either plugin is incomplete.
 
 ## 3. Back up and migrate
 
@@ -99,25 +105,10 @@ Stop Roundcube, take a storage-level snapshot, and also copy the SQLite database
 to a timestamped backup on the server. Confirm the backup is non-empty before
 continuing. Do not migrate while the old container can write to SQLite.
 
-Run two one-shot containers using the new image and existing DB volume. The
-explicit entrypoint first installs/configures the pinned Roundcube tree, then
-executes the requested plugin initializer:
-
-```sh
-docker run --rm --mount source=roundcube_db,target=/var/roundcube/db \
-  --entrypoint /docker-entrypoint.sh -e ROUNDCUBEMAIL_DB_TYPE=sqlite \
-  IMAGE_DIGEST bin/initdb.sh --dir=/var/www/html/plugins/ident_switch/SQL
-
-docker run --rm --mount source=roundcube_db,target=/var/roundcube/db \
-  --entrypoint /docker-entrypoint.sh -e ROUNDCUBEMAIL_DB_TYPE=sqlite \
-  IMAGE_DIGEST bin/initdb.sh --dir=/var/www/html/plugins/sizestation_oidc/SQL
-```
-
-This initializes both plugins on the current fresh live database. For later
-plugin upgrades, inspect the current schema version and run only the ordered
-vendor-specific files under each plugin's `SQL/<driver>/` directory. Test every
-migration against a restored backup first; never rerun an already-applied
-version blindly.
+The stack uses `stop-first` with one SQLite replica, so the previous Roundcube
+task stops before the new task runs the post-setup migrations. The initializers
+record schema versions in Roundcube's `system` table and apply only required
+changes. Test every package upgrade against a restored backup first.
 
 ## 4. Deploy
 
@@ -139,8 +130,8 @@ Check services and sanitized logs, then perform the acceptance checks in
 
 ## Rollback
 
-If deployment fails before any user login, remove the stack, restore the prior
-stack file/image digest, and restore the SQLite backup if migrations ran.
+If deployment fails before any user login, restore the prior exact Composer
+package version in the stack and restore the SQLite backup if migrations ran.
 
 After production writes have occurred, do not overwrite the database casually:
 that would lose new messages' local state, preferences, assignments, and audit
@@ -148,6 +139,6 @@ records. Stop the service, preserve the failed DB for investigation, assess the
 delta, then restore or forward-fix. OpenBao KV v2 retains previous credential
 versions, but restore a credential version only as a deliberate security action.
 
-Do not roll back to stock Roundcube while plugin tables and managed sessions are
-active. The safe rollback target is the previously tested custom image plus its
-matching database snapshot and config set.
+Do not remove the suite while managed sessions are active. The safe rollback
+target is the previously tested package version plus its matching database
+snapshot and config set.

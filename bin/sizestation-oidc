@@ -5,7 +5,11 @@ declare(strict_types=1);
 
 define('INSTALL_PATH', rtrim((string) (getenv('ROUNDCUBE_PATH') ?: '/var/www/html'), '/') . '/');
 require_once INSTALL_PATH . 'program/include/clisetup.php';
-require_once '/opt/sizestation/vendor/autoload.php';
+$suiteAutoload = INSTALL_PATH . 'vendor/autoload.php';
+if (!is_file($suiteAutoload)) {
+    $suiteAutoload = '/opt/sizestation/vendor/autoload.php';
+}
+require_once $suiteAutoload;
 
 if (in_array($_SERVER['argv'][1] ?? 'help', ['help', '--help', '-h'], true)) {
     fwrite(STDOUT, \SizeStation\Roundcube\Oidc\Cli\Application::usage());

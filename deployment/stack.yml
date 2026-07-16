@@ -20,8 +20,7 @@ services:
       restart_policy: {condition: any, delay: 5s}
 
   roundcube:
-    # Build this repository, push it to your registry, and replace the digest.
-    image: ghcr.io/sizestation/roundcube-custom-oidc@sha256:REPLACE_WITH_TESTED_DIGEST
+    image: roundcube/roundcubemail:1.7.x-apache
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -35,6 +34,9 @@ services:
       ROUNDCUBE_OIDC_CLIENT_SECRET_FILE: "/run/app-secrets/oidc-client-secret"
       ROUNDCUBE_OIDC_REDIRECT_URI: "https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback"
       ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://mail.sizestation.cloud/"
+      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.4,seb1k/elastic2022:^1.7"
+      ROUNDCUBEMAIL_PLUGINS: "archive,zipdownload,sizestation_oidc,ident_switch"
+      ROUNDCUBEMAIL_SKIN: elastic2022
       ROUNDCUBEMAIL_DB_TYPE: sqlite
       ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE: 25M
       # Verified current `public` overlay CIDR; update if the network is recreated.
@@ -42,6 +44,9 @@ services:
     configs:
       - source: roundcube_oidc_config
         target: /var/roundcube/config/sizestation_oidc.php
+      - source: roundcube_suite_installer
+        target: /entrypoint-tasks/post-setup/50-install-roundcube-oidc-suite.sh
+        mode: 0555
     volumes:
       - roundcube_db:/var/roundcube/db
       - roundcube-bao-files:/run/app-secrets:ro
@@ -80,6 +85,7 @@ networks:
 configs:
   roundcube_bao_agent: {file: ./roundcube-agent.hcl}
   roundcube_oidc_config: {file: ./roundcube-config.inc.php}
+  roundcube_suite_installer: {file: ./install-suite.sh}
 
 secrets:
   roundcube_bao_role_id: {external: true}

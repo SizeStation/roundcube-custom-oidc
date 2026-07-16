@@ -41,5 +41,5 @@ patches remain reviewable.
 - Managed identity forms show an ownership notice and do not expose connection
   fields. Update/delete hooks enforce immutability server-side, and optional
   managed-only mode rejects direct POST attempts to create arbitrary accounts.
-- Moved the SizeStation Composer autoloader to `/opt/sizestation/vendor` so the
-  custom image does not overwrite Roundcube's own vendor/autoload metadata.
+- The stock-container package uses Roundcube's normal `vendor/autoload.php`;
+  `/opt/sizestation/vendor` remains only as an optional custom-image fallback.

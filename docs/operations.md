@@ -117,7 +117,7 @@ it after assignment changes and after a partial materialization failure.
 4. update the baseline commit and change ledger;
 5. run all distribution, managed/unmanaged regression, schema, image, and
    end-to-end tests;
-6. publish a new source tag and immutable image digest;
+6. publish a new source tag and pin its exact Composer package version;
 7. rehearse migrations and rollback on a restored production backup.
 
 Never point production directly at upstream `main`.

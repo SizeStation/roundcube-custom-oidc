@@ -1,6 +1,6 @@
 # SizeStation Roundcube OIDC
 
-This distribution adds Authentik sign-in and OpenBao-managed Purelymail
+This single Composer package adds Authentik sign-in and OpenBao-managed Purelymail
 credentials to Roundcube 1.7. It extends the upstream `ident_switch` 5.0.4
 plugin instead of replacing its multi-account switching.
 
@@ -27,8 +27,13 @@ placeholders only and must not be deployed before replacing them.
 composer install
 composer test
 composer lint
-docker build -t roundcube-custom-oidc:test .
+sh tests/install-suite.sh
 ```
+
+Production uses the official Roundcube image with
+`ROUNDCUBEMAIL_COMPOSER_PLUGINS=sizestation/roundcube-oidc-suite:VERSION`.
+The supplied post-setup task installs both bundled plugin trees and their CLI.
+The Dockerfile remains an optional CI/offline fallback, not the primary deploy.
 
 ## Licence and source availability
 
@@ -36,5 +41,5 @@ The SizeStation distribution is licensed under AGPL-3.0-or-later. The retained
 upstream plugin notices and complete GNU AGPL text are in
 `plugins/ident_switch/LICENSE`. Anyone interacting with a modified deployed
 version over a network must be offered the corresponding source for that exact
-build. Publish the immutable Git commit/tag and source archive beside the image
-digest; see `SOURCE-AVAILABILITY.md`.
+package release. Publish the immutable Git commit/tag and source archive; see
+`SOURCE-AVAILABILITY.md`.

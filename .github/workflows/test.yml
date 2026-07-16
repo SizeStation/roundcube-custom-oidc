@@ -23,6 +23,7 @@ jobs:
       - run: composer install --no-interaction --no-progress
       - run: composer test
       - run: composer lint
+      - run: sh tests/install-suite.sh
 
   image:
     runs-on: ubuntu-latest

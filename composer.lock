@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4f7407a30399271c2b65a595bbffe849",
+    "content-hash": "f140aafc41b5b558a6a4f3329a2dbaf4",
     "packages": [
         {
             "name": "firebase/php-jwt",
@@ -71,34 +71,6 @@
                 "source": "https://github.com/googleapis/php-jwt/tree/v7.1.0"
             },
             "time": "2026-06-11T17:54:14+00:00"
-        },
-        {
-            "name": "sizestation/roundcube-credentials",
-            "version": "dev-main",
-            "dist": {
-                "type": "path",
-                "url": "packages/credentials",
-                "reference": "2dc453ca8d03c534fabdefaa33f5cb8417280787"
-            },
-            "require": {
-                "ext-curl": "*",
-                "ext-json": "*",
-                "php": ">=8.2"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "SizeStation\\Roundcube\\Credentials\\": "src/"
-                }
-            },
-            "license": [
-                "AGPL-3.0-or-later"
-            ],
-            "description": "Request-scoped external credential providers for Roundcube plugins",
-            "transport-options": {
-                "symlink": false,
-                "relative": true
-            }
         }
     ],
     "packages-dev": [
@@ -1948,9 +1920,7 @@
     ],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {
-        "sizestation/roundcube-credentials": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
