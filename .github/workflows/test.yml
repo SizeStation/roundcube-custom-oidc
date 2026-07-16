@@ -58,6 +58,8 @@ jobs:
         run: |
           psql -h 127.0.0.1 -U postgres -d roundcube -c \
             'CREATE TABLE system (name varchar(64) PRIMARY KEY, value text)'
+          psql -h 127.0.0.1 -U postgres -d roundcube -c \
+            'CREATE TABLE users (user_id integer PRIMARY KEY); CREATE TABLE identities (identity_id integer PRIMARY KEY)'
           psql -h 127.0.0.1 -U postgres -d roundcube \
             -f plugins/ident_switch/SQL/postgres.initial.sql
           psql -h 127.0.0.1 -U postgres -d roundcube \
@@ -88,6 +90,8 @@ jobs:
         run: |
           mysql -h 127.0.0.1 -u root roundcube -e \
             'CREATE TABLE system (name varchar(64) PRIMARY KEY, value text)'
+          mysql -h 127.0.0.1 -u root roundcube -e \
+            'CREATE TABLE users (user_id int unsigned PRIMARY KEY); CREATE TABLE identities (identity_id int unsigned PRIMARY KEY)'
           mysql -h 127.0.0.1 -u root roundcube < plugins/ident_switch/SQL/mysql.initial.sql
           mysql -h 127.0.0.1 -u root roundcube < plugins/sizestation_oidc/SQL/mysql.initial.sql
           test "$(mysql -h 127.0.0.1 -u root -N -s roundcube -e \
