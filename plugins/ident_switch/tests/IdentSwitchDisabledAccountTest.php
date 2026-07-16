@@ -3,6 +3,20 @@
 declare(strict_types=1);
 
 namespace {
+    if (!class_exists('rcube_utils', false)) {
+        final class rcube_utils
+        {
+            public const INPUT_POST = 1;
+
+            public static function get_input_value(string $name, int $source, bool $allowHtml = false): ?string
+            {
+                $value = $_POST[$name] ?? null;
+
+                return is_string($value) ? $value : null;
+            }
+        }
+    }
+
     if (!class_exists('rcmail', false)) {
         final class rcmail
         {
@@ -53,6 +67,13 @@ namespace {
                 return $username ?? '';
             }
 
+            public static function ntrim(?string $value): ?string
+            {
+                $value = trim((string) $value);
+
+                return $value === '' ? null : $value;
+            }
+
             public function add_texts(string $directory): void
             {
             }
@@ -77,14 +98,19 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
         protected function setUp(): void
         {
             $_SESSION = [];
+            $_POST = [];
             $pdo = new PDO('sqlite::memory:');
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $pdo->exec('CREATE TABLE system (name varchar(64) primary key, value text)');
+            $pdo->exec('CREATE TABLE identities (identity_id integer primary key, user_id integer, email text)');
             $pdo->exec(file_get_contents(dirname(__DIR__) . '/SQL/sqlite.initial.sql'));
             $config = new class {
+                /** @var array<string, mixed> */
+                public array $values = [];
+
                 public function get(string $key, mixed $default = null): mixed
                 {
-                    return $default;
+                    return $this->values[$key] ?? $default;
                 }
             };
             $this->roundcube = new \rcmail(new \rcube_db($pdo), $config);
@@ -163,6 +189,72 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
             self::assertSame(1, (int) $this->roundcube->db->pdo->query(
                 'SELECT COUNT(*) FROM ident_switch WHERE id = 1',
             )->fetchColumn());
+        }
+
+        public function testManagedOnlyModeRejectsCraftedSeparateAccountCreationWithHiddenFields(): void
+        {
+            $this->roundcube->config->values['ident_switch.managed_only'] = true;
+            $_POST = [
+                '_ident_switch_form_common_mode' => 'separate',
+                '_ident_switch_form_imap_host' => 'ssl://attacker.example',
+                '_ident_switch_form_smtp_host' => 'ssl://attacker.example',
+                '_ident_switch_form_imap_pass' => 'browser-secret',
+                '_ident_switch_form_credential_provider' => 'openbao',
+                '_ident_switch_form_credential_reference' => '../../other-user',
+            ];
+            $form = new \IdentSwitchForm(
+                new \ident_switch(),
+                new \IdentSwitchCredentialService($this->roundcube),
+            );
+
+            $result = $form->on_identity_create(['record' => ['email' => 'other@example.test']]);
+
+            self::assertTrue($result['abort']);
+            self::assertFalse($result['result']);
+            self::assertSame('ident_switch.err.managed_only', $result['message']);
+            self::assertArrayNotHasKey('createData' . \ident_switch::MY_POSTFIX, $_SESSION);
+        }
+
+        public function testCraftedManagedUpdateCannotChangeEmailProviderReferenceOrHosts(): void
+        {
+            $this->roundcube->db->query(
+                'UPDATE ident_switch SET flags = 1, managed_externally = 1, credential_provider = ?,'
+                . ' credential_reference = ?, imap_host = ?, smtp_host = ? WHERE id = 1',
+                'openbao',
+                'assignment/one',
+                'ssl://trusted-imap.example',
+                'ssl://trusted-smtp.example',
+            );
+            $this->roundcube->db->query(
+                'INSERT INTO identities (identity_id, user_id, email) VALUES (?, ?, ?)',
+                101,
+                10,
+                'managed@example.test',
+            );
+            $_POST = [
+                '_ident_switch_form_common_mode' => 'primary',
+                '_ident_switch_form_imap_host' => 'ssl://attacker.example',
+                '_ident_switch_form_smtp_host' => 'ssl://attacker.example',
+                '_ident_switch_form_credential_reference' => '../../other-user',
+            ];
+            $form = new \IdentSwitchForm(
+                new \ident_switch(),
+                new \IdentSwitchCredentialService($this->roundcube),
+            );
+
+            $result = $form->on_identity_update([
+                'id' => 101,
+                'record' => ['email' => 'attacker@example.test'],
+            ]);
+
+            self::assertSame('managed@example.test', $result['record']['email']);
+            $account = $this->roundcube->db->pdo->query(
+                'SELECT credential_provider, credential_reference, imap_host, smtp_host FROM ident_switch WHERE id = 1',
+            )->fetch(PDO::FETCH_ASSOC);
+            self::assertSame('openbao', $account['credential_provider']);
+            self::assertSame('assignment/one', $account['credential_reference']);
+            self::assertSame('ssl://trusted-imap.example', $account['imap_host']);
+            self::assertSame('ssl://trusted-smtp.example', $account['smtp_host']);
         }
 
         private function insertAccount(
