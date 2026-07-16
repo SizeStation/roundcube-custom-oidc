@@ -99,7 +99,17 @@ final class Application
             $credentials = new AccountCredentials($username, $password);
             $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
             if ($dryRun) {
-                return ['ok' => true, 'dry_run' => true, 'command' => 'provision', 'mailbox' => $mailbox];
+                return [
+                    'ok' => true,
+                    'dry_run' => true,
+                    'command' => 'assignment:create',
+                    'mailbox' => $mailbox,
+                    'database_changes' => ['create pending mailbox assignment'],
+                    'openbao_paths' => [$reference->value],
+                    'ident_switch_record_ids' => [],
+                    'roundcube_identity_ids' => [],
+                    'validation_actions' => $this->validationActions(),
+                ];
             }
 
             $this->provisioner->create($reference, ['username' => $username, 'password' => $password]);
@@ -161,7 +171,13 @@ final class Application
             $credentials = new AccountCredentials($username, $password);
             $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
             if (!empty($options['dry-run'])) {
-                return ['ok' => true, 'dry_run' => true, 'command' => 'rotate', 'assignment_id' => $assignment['id']];
+                return $this->assignmentDryRun(
+                    'assignment:rotate-secret',
+                    $assignment,
+                    ['write a new OpenBao KV v2 secret version', 'mark credential valid'],
+                    [$reference->value],
+                    $this->validationActions(),
+                );
             }
             $this->provisioner->write($reference, ['username' => $username, 'password' => $password]);
             (new AdminRepository($this->database))->markCredentialStatus((string) $assignment['id'], 'valid');
@@ -186,7 +202,13 @@ final class Application
     {
         $assignment = $this->assignment($options);
         if (!empty($options['dry-run'])) {
-            return ['ok' => true, 'dry_run' => true, 'command' => 'validate', 'assignment_id' => $assignment['id']];
+            return $this->assignmentDryRun(
+                'assignment:validate',
+                $assignment,
+                ['update credential validation status'],
+                [(string) $assignment['credential_reference']],
+                array_merge(['read OpenBao credential'], $this->validationActions()),
+            );
         }
         $repository = new AdminRepository($this->database);
         $credentials = null;
@@ -237,7 +259,11 @@ final class Application
     {
         $assignment = $this->assignment($options);
         if (!empty($options['dry-run'])) {
-            return ['ok' => true, 'dry_run' => true, 'command' => 'disable', 'assignment_id' => $assignment['id']];
+            return $this->assignmentDryRun(
+                'assignment:disable',
+                $assignment,
+                ['disable assignment', 'disable managed switch record during reconciliation'],
+            );
         }
         $assignment = (new AdminRepository($this->database))->disableAssignment((string) $assignment['id']);
         $this->auditRepository()->record(
@@ -259,8 +285,11 @@ final class Application
     {
         $assignment = $this->assignment($options);
         if (!empty($options['dry-run'])) {
-            return ['ok' => true, 'dry_run' => true, 'command' => 'assignment:enable',
-                'assignment_id' => $assignment['id']];
+            return $this->assignmentDryRun(
+                'assignment:enable',
+                $assignment,
+                ['enable assignment', 'materialize managed switch record during reconciliation'],
+            );
         }
         $assignment = (new AdminRepository($this->database))->enableAssignment((string) $assignment['id']);
         $this->auditRepository()->record(
@@ -282,7 +311,12 @@ final class Application
     {
         $assignment = $this->assignment($options);
         if (!empty($options['dry-run'])) {
-            return ['ok' => true, 'dry_run' => true, 'command' => 'remove', 'assignment_id' => $assignment['id']];
+            return $this->assignmentDryRun(
+                'assignment:remove',
+                $assignment,
+                ['retire assignment', 'disable managed switch record during reconciliation'],
+                !empty($options['delete-secret']) ? [(string) $assignment['credential_reference']] : [],
+            );
         }
         $removed = (new AdminRepository($this->database))->removeAssignment((string) $assignment['id']);
         $this->auditRepository()->record(
@@ -307,12 +341,11 @@ final class Application
     {
         $assignment = $this->assignment($options);
         if (!empty($options['dry-run'])) {
-            return [
-                'ok' => true,
-                'dry_run' => true,
-                'command' => 'set-preferred',
-                'assignment_id' => $assignment['id'],
-            ];
+            return $this->assignmentDryRun(
+                'assignment:set-preferred',
+                $assignment,
+                ['clear current preferred assignment', 'select requested preferred assignment'],
+            );
         }
         $assignment = (new AdminRepository($this->database))->setPreferred((string) $assignment['id']);
         $this->auditRepository()->record(
@@ -333,8 +366,11 @@ final class Application
     {
         $assignment = $this->assignment($options);
         if (!empty($options['dry-run'])) {
-            return ['ok' => true, 'dry_run' => true, 'command' => 'assignment:clear-preferred',
-                'assignment_id' => $assignment['id']];
+            return $this->assignmentDryRun(
+                'assignment:clear-preferred',
+                $assignment,
+                ['clear preferred assignment'],
+            );
         }
         $assignment = (new AdminRepository($this->database))->clearPreferred((string) $assignment['id']);
         $this->auditRepository()->record(
@@ -356,8 +392,11 @@ final class Application
     {
         $assignment = $this->assignment($options);
         if (!empty($options['dry-run'])) {
-            return ['ok' => true, 'dry_run' => true, 'command' => 'assignment:set-anchor',
-                'assignment_id' => $assignment['id']];
+            return $this->assignmentDryRun(
+                'assignment:set-anchor',
+                $assignment,
+                ['clear pre-login anchor', 'select requested pre-login anchor'],
+            );
         }
         $assignment = (new AdminRepository($this->database))->setAnchorBeforeInitialization(
             (string) $assignment['id'],
@@ -398,7 +437,8 @@ final class Application
     {
         $principalId = $this->integer($options, 'principal-id');
         if (!empty($options['dry-run'])) {
-            return ['ok' => true, 'dry_run' => true, 'command' => 'disable-principal', 'principal_id' => $principalId];
+            return ['ok' => true, 'dry_run' => true, 'command' => 'principal:disable',
+                'principal_id' => $principalId, 'database_changes' => ['disable principal']];
         }
         (new AdminRepository($this->database))->disablePrincipal($principalId);
         $this->auditRepository()->record(AuditEvent::PrincipalDisabled, 'cli', 'administrator', $principalId);
@@ -414,7 +454,7 @@ final class Application
         $principalId = $this->integer($options, 'principal-id');
         if (!empty($options['dry-run'])) {
             return ['ok' => true, 'dry_run' => true, 'command' => 'principal:enable',
-                'principal_id' => $principalId];
+                'principal_id' => $principalId, 'database_changes' => ['enable principal']];
         }
         $principal = (new AdminRepository($this->database))->enablePrincipal($principalId);
         $this->auditRepository()->record(AuditEvent::PrincipalEnabled, 'cli', 'administrator', $principalId);
@@ -460,7 +500,22 @@ final class Application
                 continue;
             }
             if (!empty($options['dry-run'])) {
-                $results[] = ['principal_id' => (int) $principal['id'], 'status' => 'dry-run'];
+                $assignments = (new AdminRepository($this->database))->assignments((int) $principal['id']);
+                $results[] = [
+                    'principal_id' => (int) $principal['id'],
+                    'status' => 'dry-run',
+                    'database_changes' => ['reconcile assignments and managed materialization state'],
+                    'assignment_ids' => array_column($assignments, 'id'),
+                    'ident_switch_record_ids' => array_values(array_filter(array_column(
+                        $assignments,
+                        'ident_switch_record_id',
+                    ))),
+                    'roundcube_identity_ids' => array_values(array_filter(array_column(
+                        $assignments,
+                        'roundcube_identity_id',
+                    ))),
+                    'validation_actions' => [],
+                ];
                 continue;
             }
             $id = (int) $principal['id'];
@@ -704,6 +759,50 @@ final class Application
         if (!hash_equals($expected, $actual)) {
             throw new RuntimeException('Managed credential username must match the assignment mailbox');
         }
+    }
+
+    /** @param array<string, mixed> $assignment
+     *  @param list<string> $databaseChanges
+     *  @param list<string> $openBaoPaths
+     *  @param list<string> $validationActions
+     *  @return array<string, mixed>
+     */
+    private function assignmentDryRun(
+        string $command,
+        array $assignment,
+        array $databaseChanges,
+        array $openBaoPaths = [],
+        array $validationActions = [],
+    ): array {
+        return [
+            'ok' => true,
+            'dry_run' => true,
+            'command' => $command,
+            'assignment_id' => $assignment['id'],
+            'database_changes' => $databaseChanges,
+            'openbao_paths' => $openBaoPaths,
+            'ident_switch_record_ids' => $assignment['ident_switch_record_id'] === null
+                ? []
+                : [(int) $assignment['ident_switch_record_id']],
+            'roundcube_identity_ids' => $assignment['roundcube_identity_id'] === null
+                ? []
+                : [(int) $assignment['roundcube_identity_id']],
+            'validation_actions' => $validationActions,
+        ];
+    }
+
+    /** @return list<string> */
+    private function validationActions(): array
+    {
+        $actions = [];
+        if ($this->validator !== null && $this->validateImap) {
+            $actions[] = 'validate fixed IMAP endpoint';
+        }
+        if ($this->validator !== null && $this->validateSmtp) {
+            $actions[] = 'validate fixed SMTP endpoint';
+        }
+
+        return $actions;
     }
 
     public static function usage(): string

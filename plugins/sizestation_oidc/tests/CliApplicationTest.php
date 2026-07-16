@@ -74,6 +74,11 @@ final class CliApplicationTest extends TestCase
 
         self::assertSame(0, $exit);
         self::assertStringContainsString('"dry_run":true', $stdout);
+        $plan = json_decode($stdout, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame(['mailboxes/anchor'], $plan['openbao_paths']);
+        self::assertContains('create pending mailbox assignment', $plan['database_changes']);
+        self::assertSame([], $plan['ident_switch_record_ids']);
+        self::assertArrayHasKey('validation_actions', $plan);
         self::assertSame([], $this->provisioner->writes);
         self::assertSame(0, (int) $this->database->pdo->query(
             'SELECT COUNT(*) FROM sizestation_mailbox_assignments',
