@@ -38,7 +38,8 @@ Create the external Swarm `roundcube_bao_role_id` and
 From a clean tested checkout:
 
 ```sh
-docker build --pull=false -t ghcr.io/sizestation/roundcube-custom-oidc:GIT_SHA .
+docker build --pull=false --build-arg VCS_REF=GIT_SHA \
+  -t ghcr.io/sizestation/roundcube-custom-oidc:GIT_SHA .
 docker push ghcr.io/sizestation/roundcube-custom-oidc:GIT_SHA
 docker inspect --format '{{index .RepoDigests 0}}' \
   ghcr.io/sizestation/roundcube-custom-oidc:GIT_SHA
