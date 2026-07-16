@@ -52,11 +52,16 @@ namespace {
             {
                 return $username ?? '';
             }
+
+            public function add_texts(string $directory): void
+            {
+            }
         }
     }
 
     require_once dirname(__DIR__) . '/lib/IdentSwitchCredentialService.php';
     require_once dirname(__DIR__) . '/lib/IdentSwitchSwitcher.php';
+    require_once dirname(__DIR__) . '/lib/IdentSwitchForm.php';
 }
 
 namespace SizeStation\Roundcube\Tests\IdentSwitch {
@@ -91,6 +96,7 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
             $service = new \IdentSwitchCredentialService($this->roundcube);
 
             self::assertNull($service->accountByIdentity(101));
+            self::assertNotNull($service->accountByIdentity(101, false));
         }
 
         public function testCraftedSwitchRequestRejectsDisabledAccount(): void
@@ -125,13 +131,53 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
             self::assertSame($sieve, $switcher->configure_managesieve($sieve));
         }
 
-        private function insertAccount(int $id, int $identityId, int $flags, int $parentId): void
+        public function testCraftedSwitchCannotSelectAnotherUsersEnabledAccount(): void
+        {
+            $this->insertAccount(2, 102, 1, 0, 11);
+            $_SESSION = ['username' => 'anchor@example.test', 'sentinel' => 'unchanged'];
+            $before = $_SESSION;
+            $switcher = new \IdentSwitchSwitcher(new \IdentSwitchCredentialService($this->roundcube));
+
+            self::assertFalse($switcher->switchAccountById(2, false));
+            self::assertSame($before, $_SESSION);
+        }
+
+        public function testDisabledManagedAccountStillCannotBeDeletedFromSettings(): void
+        {
+            $this->roundcube->db->query(
+                'UPDATE ident_switch SET managed_externally = ?, managed_assignment_id = ? WHERE id = ?',
+                1,
+                '00000000-0000-4000-8000-000000000001',
+                1,
+            );
+            $form = new \IdentSwitchForm(
+                new \ident_switch(),
+                new \IdentSwitchCredentialService($this->roundcube),
+            );
+
+            $result = $form->on_identity_delete(['id' => 101]);
+
+            self::assertTrue($result['abort']);
+            self::assertFalse($result['result']);
+            self::assertSame('ident_switch.err.managed', $result['message']);
+            self::assertSame(1, (int) $this->roundcube->db->pdo->query(
+                'SELECT COUNT(*) FROM ident_switch WHERE id = 1',
+            )->fetchColumn());
+        }
+
+        private function insertAccount(
+            int $id,
+            int $identityId,
+            int $flags,
+            int $parentId,
+            int $userId = 10,
+        ): void
         {
             $this->roundcube->db->query(
                 'INSERT INTO ident_switch (id, user_id, iid, parent_id, label, flags, username, password,'
                 . ' smtp_auth, sieve_auth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 $id,
-                10,
+                $userId,
                 $identityId,
                 $parentId ?: null,
                 'account-' . $id,

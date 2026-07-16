@@ -768,7 +768,7 @@ class IdentSwitchForm
     public function on_identity_update(array $args): array
     {
         $rc = rcmail::get_instance();
-        $account = $this->credentials->accountByIdentity((int) $args['id']);
+        $account = $this->credentials->accountByIdentity((int) $args['id'], false);
 
         if ($this->credentials->isManaged($account)) {
             $sql = 'SELECT email FROM ' . $rc->db->table_name('identities')
@@ -956,7 +956,7 @@ class IdentSwitchForm
     {
         $rc = rcmail::get_instance();
 
-        if ($this->credentials->isManaged($this->credentials->accountByIdentity((int) $args['id']))) {
+        if ($this->credentials->isManaged($this->credentials->accountByIdentity((int) $args['id'], false))) {
             $this->plugin->add_texts('localization');
             $args['abort'] = true;
             $args['result'] = false;

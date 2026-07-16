@@ -46,17 +46,17 @@ final class IdentSwitchCredentialService
     }
 
     /** @return array<string, mixed>|null */
-    public function accountByIdentity(int $identityId): ?array
+    public function accountByIdentity(int $identityId, bool $enabledOnly = true): ?array
     {
         $sql = 'SELECT ' . self::ACCOUNT_FIELDS . ' FROM '
             . $this->rc->db->table_name(ident_switch::TABLE)
-            . ' WHERE iid = ? AND user_id = ? AND flags & ? > 0';
-        $query = $this->rc->db->query(
-            $sql,
-            $identityId,
-            $this->rc->user->ID,
-            ident_switch::DB_ENABLED,
-        );
+            . ' WHERE iid = ? AND user_id = ?';
+        $parameters = [$identityId, $this->rc->user->ID];
+        if ($enabledOnly) {
+            $sql .= ' AND flags & ? > 0';
+            $parameters[] = ident_switch::DB_ENABLED;
+        }
+        $query = $this->rc->db->query($sql, ...$parameters);
         $row = $this->rc->db->fetch_assoc($query);
 
         return is_array($row) ? $row : null;
