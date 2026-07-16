@@ -47,14 +47,23 @@ final class Application
             $command = $argv[1] ?? 'help';
             $options = $this->options(array_slice($argv, 2));
             $result = match ($command) {
-                'provision' => $this->provision($options, $stdin),
-                'rotate' => $this->rotate($options, $stdin),
-                'validate' => $this->validate($options),
-                'disable' => $this->disable($options),
-                'remove' => $this->remove($options),
-                'set-preferred' => $this->setPreferred($options),
-                'disable-principal' => $this->disablePrincipal($options),
-                'reconcile' => $this->reconcile($options),
+                'provision', 'assignment:create' => $this->provision($options, $stdin),
+                'rotate', 'assignment:rotate-secret' => $this->rotate($options, $stdin),
+                'validate', 'assignment:validate' => $this->validate($options),
+                'disable', 'assignment:disable' => $this->disable($options),
+                'assignment:enable' => $this->enableAssignment($options),
+                'remove', 'assignment:remove' => $this->remove($options),
+                'set-preferred', 'assignment:set-preferred' => $this->setPreferred($options),
+                'assignment:clear-preferred' => $this->clearPreferred($options),
+                'assignment:set-anchor' => $this->setAnchor($options),
+                'assignment:list' => $this->listAssignments($options),
+                'assignment:show' => $this->showAssignment($options),
+                'disable-principal', 'principal:disable' => $this->disablePrincipal($options),
+                'principal:enable' => $this->enablePrincipal($options),
+                'principal:list' => $this->listPrincipals($options),
+                'principal:show' => $this->showPrincipal($options),
+                'sync:user' => $this->reconcileUser($options),
+                'reconcile', 'sync:all' => $this->reconcile($options),
                 'audit' => $this->audit($options),
                 'help', '--help', '-h' => ['help' => self::usage()],
                 default => throw new RuntimeException('Unknown administrative command'),
@@ -246,6 +255,29 @@ final class Application
     /** @param array<string, string|bool> $options
      *  @return array<string, mixed>
      */
+    private function enableAssignment(array $options): array
+    {
+        $assignment = $this->assignment($options);
+        if (!empty($options['dry-run'])) {
+            return ['ok' => true, 'dry_run' => true, 'command' => 'assignment:enable',
+                'assignment_id' => $assignment['id']];
+        }
+        $assignment = (new AdminRepository($this->database))->enableAssignment((string) $assignment['id']);
+        $this->auditRepository()->record(
+            AuditEvent::AssignmentEnabled,
+            'cli',
+            'administrator',
+            $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
+            (string) $assignment['id'],
+        );
+        $this->reconcilePrincipalOf($assignment);
+
+        return ['ok' => true, 'assignment_id' => $assignment['id'], 'enabled' => true];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
     private function remove(array $options): array
     {
         $assignment = $this->assignment($options);
@@ -297,6 +329,71 @@ final class Application
     /** @param array<string, string|bool> $options
      *  @return array<string, mixed>
      */
+    private function clearPreferred(array $options): array
+    {
+        $assignment = $this->assignment($options);
+        if (!empty($options['dry-run'])) {
+            return ['ok' => true, 'dry_run' => true, 'command' => 'assignment:clear-preferred',
+                'assignment_id' => $assignment['id']];
+        }
+        $assignment = (new AdminRepository($this->database))->clearPreferred((string) $assignment['id']);
+        $this->auditRepository()->record(
+            AuditEvent::PreferredAccountChanged,
+            'cli',
+            'administrator',
+            $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
+            (string) $assignment['id'],
+            ['preferred' => false],
+        );
+
+        return ['ok' => true, 'assignment_id' => $assignment['id'], 'preferred' => false];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
+    private function setAnchor(array $options): array
+    {
+        $assignment = $this->assignment($options);
+        if (!empty($options['dry-run'])) {
+            return ['ok' => true, 'dry_run' => true, 'command' => 'assignment:set-anchor',
+                'assignment_id' => $assignment['id']];
+        }
+        $assignment = (new AdminRepository($this->database))->setAnchorBeforeInitialization(
+            (string) $assignment['id'],
+        );
+        $this->auditRepository()->record(
+            AuditEvent::AnchorSelected,
+            'cli',
+            'administrator',
+            $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
+            (string) $assignment['id'],
+        );
+
+        return ['ok' => true, 'assignment_id' => $assignment['id'], 'anchor' => true];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
+    private function listAssignments(array $options): array
+    {
+        $principalId = isset($options['principal-id']) ? $this->integer($options, 'principal-id') : null;
+
+        return ['ok' => true, 'assignments' => (new AdminRepository($this->database))->assignments($principalId)];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
+    private function showAssignment(array $options): array
+    {
+        return ['ok' => true, 'assignment' => $this->assignment($options)];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
     private function disablePrincipal(array $options): array
     {
         $principalId = $this->integer($options, 'principal-id');
@@ -307,6 +404,46 @@ final class Application
         $this->auditRepository()->record(AuditEvent::PrincipalDisabled, 'cli', 'administrator', $principalId);
 
         return ['ok' => true, 'principal_id' => $principalId, 'status' => 'disabled'];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
+    private function enablePrincipal(array $options): array
+    {
+        $principalId = $this->integer($options, 'principal-id');
+        if (!empty($options['dry-run'])) {
+            return ['ok' => true, 'dry_run' => true, 'command' => 'principal:enable',
+                'principal_id' => $principalId];
+        }
+        $principal = (new AdminRepository($this->database))->enablePrincipal($principalId);
+        $this->auditRepository()->record(AuditEvent::PrincipalEnabled, 'cli', 'administrator', $principalId);
+
+        return ['ok' => true, 'principal_id' => $principalId, 'status' => $principal['status']];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
+    private function listPrincipals(array $options): array
+    {
+        $principalId = isset($options['principal-id']) ? $this->integer($options, 'principal-id') : null;
+
+        return ['ok' => true, 'principals' => (new AdminRepository($this->database))->principals($principalId)];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
+    private function showPrincipal(array $options): array
+    {
+        $principalId = $this->integer($options, 'principal-id');
+        $principals = (new AdminRepository($this->database))->principals($principalId);
+        if ($principals === []) {
+            throw new RuntimeException('Principal was not found');
+        }
+
+        return ['ok' => true, 'principal' => $principals[0]];
     }
 
     /** @param array<string, string|bool> $options
@@ -375,6 +512,16 @@ final class Application
         }
 
         return ['ok' => true, 'results' => $results];
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
+    private function reconcileUser(array $options): array
+    {
+        $this->integer($options, 'principal-id');
+
+        return $this->reconcile($options);
     }
 
     /** @param array<string, string|bool> $options
@@ -565,19 +712,24 @@ final class Application
 SizeStation Roundcube OIDC administration
 
 Commands:
-  provision --issuer URL --external-user-id ID --mailbox ADDRESS
-            --credential-reference PATH --password-stdin [--anchor] [--preferred]
-  rotate --assignment-id UUID --password-stdin [--username ADDRESS]
-  validate --assignment-id UUID
-  disable --assignment-id UUID
-  remove --assignment-id UUID
-  set-preferred --assignment-id UUID
-  disable-principal --principal-id ID
-  reconcile [--principal-id ID]
+  principal:list [--principal-id ID]
+  principal:show --principal-id ID
+  principal:disable|principal:enable --principal-id ID
+  assignment:create --issuer URL --external-user-id ID --mailbox ADDRESS
+                    --credential-reference PATH --password-stdin [--anchor] [--preferred]
+  assignment:list [--principal-id ID]
+  assignment:show --assignment-id UUID
+  assignment:disable|assignment:enable|assignment:remove --assignment-id UUID
+  assignment:set-anchor|assignment:set-preferred|assignment:clear-preferred --assignment-id UUID
+  assignment:validate --assignment-id UUID
+  assignment:rotate-secret --assignment-id UUID --password-stdin [--username ADDRESS]
+  sync:user --principal-id ID
+  sync:all
   audit [--principal-id ID] [--limit NUMBER]
 
 Mutation commands support --dry-run. All commands support --json.
 Passwords are accepted only from standard input and are never printed.
+Legacy shorthand commands remain accepted for compatibility.
 USAGE;
     }
 }

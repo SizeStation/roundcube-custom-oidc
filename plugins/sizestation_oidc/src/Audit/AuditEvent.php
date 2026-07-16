@@ -10,10 +10,12 @@ enum AuditEvent: string
     case OidcLoginFailure = 'oidc_login_failure';
     case PrincipalCreated = 'principal_created';
     case PrincipalDisabled = 'principal_disabled';
+    case PrincipalEnabled = 'principal_enabled';
     case AssignmentCreated = 'assignment_created';
     case AssignmentBound = 'assignment_bound';
     case AssignmentMaterialized = 'assignment_materialized';
     case AssignmentDisabled = 'assignment_disabled';
+    case AssignmentEnabled = 'assignment_enabled';
     case AssignmentRemoved = 'assignment_removed';
     case AnchorSelected = 'anchor_selected';
     case PreferredAccountChanged = 'preferred_account_changed';

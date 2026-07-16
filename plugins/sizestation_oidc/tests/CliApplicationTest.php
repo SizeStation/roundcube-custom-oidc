@@ -11,6 +11,7 @@ use SizeStation\Roundcube\Credentials\AccountCredentials;
 use SizeStation\Roundcube\Credentials\Exception\CredentialFailureKind;
 use SizeStation\Roundcube\Credentials\Exception\ExternalCredentialException;
 use SizeStation\Roundcube\Oidc\Cli\Application;
+use SizeStation\Roundcube\Oidc\Repository\PrincipalRepository;
 
 #[RequiresPhpExtension('pdo_sqlite')]
 final class CliApplicationTest extends TestCase
@@ -370,6 +371,102 @@ final class CliApplicationTest extends TestCase
         self::assertSame('openbao_unavailable', $this->database->pdo->query(
             'SELECT event_type FROM sizestation_oidc_audit_log ORDER BY id DESC LIMIT 1',
         )->fetchColumn());
+    }
+
+    public function testCanonicalAssignmentCommandsListShowEnableAndSelectPreLoginAnchor(): void
+    {
+        [, $anchorOutput] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=anchor@example.test',
+            '--credential-reference=mailboxes/anchor', '--anchor', '--preferred', '--password-stdin', '--json',
+        ], "anchor-secret\n");
+        [, $secondaryOutput] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=secondary@example.test',
+            '--credential-reference=mailboxes/secondary', '--password-stdin', '--json',
+        ], "secondary-secret\n");
+        $anchorId = (string) json_decode($anchorOutput, true, flags: JSON_THROW_ON_ERROR)['assignment_id'];
+        $secondaryId = (string) json_decode($secondaryOutput, true, flags: JSON_THROW_ON_ERROR)['assignment_id'];
+
+        [$listExit, $listOutput] = $this->runApplication([
+            'sizestation-oidc', 'assignment:list', '--json',
+        ], '');
+        [$showExit, $showOutput] = $this->runApplication([
+            'sizestation-oidc', 'assignment:show', '--assignment-id=' . $secondaryId, '--json',
+        ], '');
+        self::assertSame(0, $listExit);
+        self::assertCount(2, json_decode($listOutput, true, flags: JSON_THROW_ON_ERROR)['assignments']);
+        self::assertSame(0, $showExit);
+        self::assertSame($secondaryId, json_decode(
+            $showOutput,
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        )['assignment']['id']);
+
+        [$anchorExit] = $this->runApplication([
+            'sizestation-oidc', 'assignment:set-anchor', '--assignment-id=' . $secondaryId, '--json',
+        ], '');
+        self::assertSame(0, $anchorExit);
+        self::assertSame(0, (int) $this->database->pdo->query(
+            "SELECT is_anchor FROM sizestation_mailbox_assignments WHERE id = '{$anchorId}'",
+        )->fetchColumn());
+        self::assertSame(1, (int) $this->database->pdo->query(
+            "SELECT is_anchor FROM sizestation_mailbox_assignments WHERE id = '{$secondaryId}'",
+        )->fetchColumn());
+
+        [$clearExit] = $this->runApplication([
+            'sizestation-oidc', 'assignment:clear-preferred', '--assignment-id=' . $anchorId, '--json',
+        ], '');
+        self::assertSame(0, $clearExit);
+        self::assertSame(0, (int) $this->database->pdo->query(
+            'SELECT COUNT(*) FROM sizestation_mailbox_assignments WHERE is_preferred = 1',
+        )->fetchColumn());
+
+        [$disableExit] = $this->runApplication([
+            'sizestation-oidc', 'assignment:disable', '--assignment-id=' . $anchorId, '--json',
+        ], '');
+        [$enableExit] = $this->runApplication([
+            'sizestation-oidc', 'assignment:enable', '--assignment-id=' . $anchorId, '--json',
+        ], '');
+        self::assertSame(0, $disableExit);
+        self::assertSame(0, $enableExit);
+        self::assertSame(1, (int) $this->database->pdo->query(
+            "SELECT enabled FROM sizestation_mailbox_assignments WHERE id = '{$anchorId}'",
+        )->fetchColumn());
+    }
+
+    public function testCanonicalPrincipalCommandsListShowDisableAndEnable(): void
+    {
+        $principal = (new PrincipalRepository($this->database))->resolveOrCreate(
+            'https://issuer.example',
+            'subject-1',
+            'external-1',
+        );
+        $principalId = (int) $principal['id'];
+
+        [$listExit, $listOutput] = $this->runApplication([
+            'sizestation-oidc', 'principal:list', '--json',
+        ], '');
+        [$showExit] = $this->runApplication([
+            'sizestation-oidc', 'principal:show', '--principal-id=' . $principalId, '--json',
+        ], '');
+        [$disableExit] = $this->runApplication([
+            'sizestation-oidc', 'principal:disable', '--principal-id=' . $principalId, '--json',
+        ], '');
+        [$enableExit, $enableOutput] = $this->runApplication([
+            'sizestation-oidc', 'principal:enable', '--principal-id=' . $principalId, '--json',
+        ], '');
+
+        self::assertSame(0, $listExit);
+        self::assertCount(1, json_decode($listOutput, true, flags: JSON_THROW_ON_ERROR)['principals']);
+        self::assertSame(0, $showExit);
+        self::assertSame(0, $disableExit);
+        self::assertSame(0, $enableExit);
+        self::assertSame('pending', json_decode(
+            $enableOutput,
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        )['status']);
     }
 
     /** @param list<string> $arguments
