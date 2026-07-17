@@ -21,6 +21,7 @@ $(function() {
 	}
 
 	var $sw = $wrapper.find('#plugin-ident_switch-account');
+	$sw.addClass('ident-switch-native');
 	var placed = false;
 	var enhanced = false;
 	var $elasticTarget = plugin_switchIdent_elasticTarget();
@@ -70,6 +71,10 @@ function ident_switch_buildMenu($wrapper, $sw) {
 	if (!$selected.length) {
 		return false;
 	}
+
+	// Elastic2022 has a late compatibility hook that moves and shows the
+	// historical ID. Rename it once our enhanced control owns switching.
+	$sw.attr('id', 'plugin-ident_switch-account-native');
 
 	var $button = $('<button>', {
 		type: 'button',
@@ -296,7 +301,7 @@ function plugin_switchIdent_switch(val) {
  */
 function ident_switch_updateCounts(data) {
 	var map = rcmail.env.ident_switch_iid_map || {};
-	var $select = $('#plugin-ident_switch-account');
+	var $select = $('#ident-switch-wrapper .ident-switch-native');
 	var totalDelta = 0;
 
 	// Reset all options to original text

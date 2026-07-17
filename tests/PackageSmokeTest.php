@@ -54,6 +54,8 @@ final class PackageSmokeTest extends TestCase
 
         self::assertStringContainsString("$('#layout-sidebar > .header-title.username')", $script);
         self::assertStringNotContainsString("rcmail.env.skin === 'elastic'", $script);
+        self::assertStringContainsString("\$sw.attr('id', 'plugin-ident_switch-account-native')", $script);
+        self::assertStringContainsString("$('#ident-switch-wrapper .ident-switch-native')", $script);
         self::assertStringContainsString('#layout-sidebar > .header-title.username', $stylesheet);
         self::assertStringContainsString('flex: 0 0 3.25rem', $stylesheet);
     }

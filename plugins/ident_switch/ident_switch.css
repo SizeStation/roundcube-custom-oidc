@@ -76,7 +76,7 @@
 	width: 100%;
 	min-width: 0;
 }
-.ident-switch-enhanced > #plugin-ident_switch-account {
+.ident-switch-enhanced > .ident-switch-native {
 	display: none !important;
 }
 .ident-switch-button {
