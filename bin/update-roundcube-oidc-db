@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$roundcubeRoot = realpath(__DIR__ . '/../../..');
+if ($roundcubeRoot === false) {
+    fwrite(STDERR, "Unable to locate the Roundcube installation\n");
+    exit(1);
+}
+
+define('INSTALL_PATH', $roundcubeRoot . '/');
+require_once INSTALL_PATH . 'program/include/clisetup.php';
+
+$schemaDirectory = dirname(__DIR__) . '/SQL';
+$package = 'roundcube_oidc_suite';
+
+if (rcmail_utils::db_version($package) === null) {
+    rcmail_utils::db_init($schemaDirectory);
+}
+
+rcmail_utils::db_update($schemaDirectory, $package, null, ['errors' => true]);

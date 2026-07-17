@@ -10,6 +10,7 @@ if (!is_file($suiteAutoload)) {
     $suiteAutoload = '/opt/sizestation/vendor/autoload.php';
 }
 require_once $suiteAutoload;
+require_once dirname(__DIR__) . '/autoload.php';
 
 if (in_array($_SERVER['argv'][1] ?? 'help', ['help', '--help', '-h'], true)) {
     fwrite(STDOUT, \SizeStation\Roundcube\Oidc\Cli\Application::usage());

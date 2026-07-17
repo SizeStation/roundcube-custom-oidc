@@ -11,6 +11,7 @@ $roundcubeRootAutoloader = dirname(__DIR__, 2) . '/vendor/autoload.php';
 if (is_file($roundcubeRootAutoloader)) {
     require_once $roundcubeRootAutoloader;
 }
+require_once __DIR__ . '/autoload.php';
 
 require_once __DIR__ . '/plugins/ident_switch/ident_switch.php';
 require_once __DIR__ . '/plugins/sizestation_oidc/sizestation_oidc.php';

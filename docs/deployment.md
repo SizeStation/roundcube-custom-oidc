@@ -74,10 +74,15 @@ git push origin v1.0.0
 Set `ROUNDCUBEMAIL_COMPOSER_PLUGINS` to that exact package version in the stack.
 The official Roundcube entrypoint invokes Composer. Because the package is type
 `roundcube-plugin`, Roundcube's official plugin installer places it directly in
-`plugins/roundcube_oidc_suite`, creates its config stub, and initializes the
-combined schema. The plugin reads its custom environment variables itself.
-There is no mounted Roundcube PHP config, copy script, post-setup task, or
-custom image.
+`plugins/roundcube_oidc_suite` and creates its config stub. The stack invokes
+the package-owned `bin/start-roundcube-oidc` launcher through the official
+entrypoint. That launcher uses Roundcube's database API to initialize the suite
+schema on first install or apply incremental migrations on upgrades, after the
+entrypoint has generated the database configuration, then starts Apache. This
+ordering is required because the official image installs Composer plugins
+before creating `config.docker.inc.php`. The plugin reads its custom environment
+variables itself. There is no mounted Roundcube PHP config, separate post-setup
+service, or custom image.
 
 ## 3. Back up and migrate
 
