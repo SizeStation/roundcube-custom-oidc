@@ -33,9 +33,13 @@ Production uses the official Roundcube image with
 `ROUNDCUBEMAIL_COMPOSER_PLUGINS=sizestation/roundcube-oidc-suite:VERSION`.
 The package is a standard `roundcube-plugin`; Roundcube's Composer installer
 places it directly in `plugins/roundcube_oidc_suite`, creates its config stub,
-and applies its database schema. The plugin reads its custom environment
-variables internally. No mounted PHP config, custom image, or deployment
-installer runs.
+and invokes its supported install/update hook. On a configured Roundcube that
+hook applies the database schema immediately. In the official Docker image it
+registers the migration as a built-in post-setup task, because that image
+creates its database configuration after Composer runs. The migration still
+finishes before Apache starts. The plugin reads its custom environment
+variables internally. No mounted PHP config, custom image, custom service
+command, or manual migration step is required.
 
 ## Licence and source availability
 

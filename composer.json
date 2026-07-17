@@ -32,7 +32,10 @@
     },
     "extra": {
         "roundcube": {
-            "min-version": "1.7"
+            "min-version": "1.7",
+            "post-install-script": "./bin/install-roundcube-oidc.php",
+            "post-update-script": "./bin/install-roundcube-oidc.php",
+            "post-uninstall-script": "./bin/uninstall-roundcube-oidc.php"
         }
     },
     "scripts": {

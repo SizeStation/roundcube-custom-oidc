@@ -1,9 +1,0 @@
-#!/bin/sh
-
-set -eu
-
-SCRIPT_DIRECTORY="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-
-php "$SCRIPT_DIRECTORY/update-roundcube-oidc-db"
-
-exec apache2-foreground

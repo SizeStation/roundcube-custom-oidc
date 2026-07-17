@@ -5,7 +5,7 @@ remained untouched.
 
 ## Automated and build evidence
 
-- PHPUnit: **114 tests, 336 assertions**, all passing from a clean locked install.
+- PHPUnit: **116 tests, 351 assertions**, all passing from a clean locked install.
 - PHPCS: **85 files**, all passing.
 - Fresh SQLite plugin migration: Roundcube's official Composer installer
   reported `[OK]` and created both internal schemas from the combined SQL set.
@@ -17,6 +17,11 @@ remained untouched.
   `plugins/roundcube_oidc_suite`; its one entrypoint loaded OIDC, shared
   credentials, account switching, and the packaged environment/`_FILE`
   configuration successfully. No copy script or custom image participated.
+- A clean configured Roundcube Composer install invoked the package lifecycle,
+  initialized the combined SQLite schema, and recorded all three package
+  versions. The official-image deferred path registered and removed its
+  post-setup migration task in a disposable lifecycle fixture without requiring
+  a custom service command.
 - `docker stack config` rendered the supplied Swarm file successfully with the
   intended native Roundcube secret path and no mounted PHP configuration.
 - OpenBao Agent uses the operator's existing shared-tmpfs pattern and renders

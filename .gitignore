@@ -1,4 +1,4 @@
 .inspection/
 .phpunit.cache/
+config.inc.php
 vendor/
-

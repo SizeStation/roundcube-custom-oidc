@@ -3,3 +3,4 @@
 // The plugin loads its versioned environment mapping from config.runtime.php.
 // Put optional installation-specific PHP overrides in config.inc.php. The
 // Roundcube Composer installer preserves that local file across package updates.
+$config = [];

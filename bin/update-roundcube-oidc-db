@@ -3,20 +3,15 @@
 
 declare(strict_types=1);
 
-$roundcubeRoot = realpath(__DIR__ . '/../../..');
+$scriptPath = realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? __FILE__));
+$scriptDirectory = $scriptPath === false ? __DIR__ : dirname($scriptPath);
+$roundcubeRoot = realpath($scriptDirectory . '/../../..');
 if ($roundcubeRoot === false) {
     fwrite(STDERR, "Unable to locate the Roundcube installation\n");
     exit(1);
 }
 
-define('INSTALL_PATH', $roundcubeRoot . '/');
-require_once INSTALL_PATH . 'program/include/clisetup.php';
+$schemaDirectory = dirname($scriptDirectory) . '/SQL';
+require_once $scriptDirectory . '/update-roundcube-oidc-db.php';
 
-$schemaDirectory = dirname(__DIR__) . '/SQL';
-$package = 'roundcube_oidc_suite';
-
-if (rcmail_utils::db_version($package) === null) {
-    rcmail_utils::db_init($schemaDirectory);
-}
-
-rcmail_utils::db_update($schemaDirectory, $package, null, ['errors' => true]);
+sizestation_update_roundcube_oidc_db($roundcubeRoot, $schemaDirectory);
