@@ -30,11 +30,15 @@ final class PackageSmokeTest extends TestCase
         self::assertSame(1, preg_match('/-rc\.([0-9]+)\z/', $version, $releaseMatch));
         $plugin = (string) file_get_contents($root . '/plugins/ident_switch/ident_switch.php');
         $stylesheetName = 'ident_switch-rc' . $releaseMatch[1] . '.css';
-        $stylesheet = $root . '/plugins/ident_switch/' . $stylesheetName;
+        $stylesheet = $root . '/' . $stylesheetName;
         self::assertFileExists($stylesheet);
-        self::assertStringContainsString($stylesheetName, $plugin);
+        self::assertStringContainsString("include_stylesheet('{$stylesheetName}')", $plugin);
+        self::assertStringNotContainsString("include_stylesheet('plugins/", $plugin);
         self::assertStringContainsString('ident_switch-switch.js?v=' . $version, $plugin);
-        self::assertStringContainsString('ident_switch.css?v=' . $version, (string) file_get_contents($stylesheet));
+        self::assertStringContainsString(
+            'plugins/ident_switch/ident_switch.css?v=' . $version,
+            (string) file_get_contents($stylesheet),
+        );
     }
 
     public function testSharedPackageIsAutoloadable(): void
