@@ -44,9 +44,22 @@
    parent's flex/line-height context, keeping the wrapper vertically centered. */
 .header-title.username {
 	visibility: hidden;
-	flex: 1 1 auto;
 	min-width: 0;
 	overflow: visible;
+}
+
+/* Elastic2022 renders this slot directly above its Compose header. Reserve its
+   final height before DOMReady so inserting the switcher cannot move Compose. */
+#layout-sidebar > .header-title.username {
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	flex: 0 0 3.25rem;
+	width: 100%;
+	height: 3.25rem;
+	min-height: 3.25rem;
+	padding: 0.4rem 0.65rem !important;
+	position: relative;
 }
 .header-title.username > *:not(.ident-switch-wrapper) {
 	display: none;
@@ -77,8 +90,8 @@
 	padding: 0.35rem 0.55rem;
 	border: 1px solid rgba(255, 255, 255, 0.08);
 	border-radius: 0.45rem;
-	color: #f1f3f4;
-	background: rgba(255, 255, 255, 0.06);
+	color: var(--font, #f1f3f4);
+	background: var(--backgroundbutton, rgba(255, 255, 255, 0.06));
 	box-shadow: none;
 	-webkit-appearance: none;
 	appearance: none;
@@ -93,9 +106,9 @@
 .ident-switch-button:hover,
 .ident-switch-button:focus,
 .ident-switch-open .ident-switch-button {
-	color: #fff;
-	background: rgba(255, 255, 255, 0.12);
-	border-color: rgba(255, 255, 255, 0.18);
+	color: var(--font, #fff);
+	background: var(--backgroundhover, rgba(255, 255, 255, 0.12));
+	border-color: var(--bordercolor, rgba(255, 255, 255, 0.18));
 	outline: none;
 }
 .ident-switch-button:focus-visible {
@@ -114,8 +127,8 @@
 	width: 1.8rem;
 	height: 1.8rem;
 	border-radius: 50%;
-	color: #172126;
-	background: #d7e6ec;
+	color: var(--font, #172126);
+	background: var(--backgroundcompose, #d7e6ec);
 	font-size: 0.78rem;
 	font-weight: 700;
 	line-height: 1;
@@ -150,9 +163,9 @@
 	min-width: 100%;
 	max-width: min(22rem, calc(100vw - 1rem));
 	padding: 0.35rem;
-	border: 1px solid #3c484d;
+	border: 1px solid var(--bordercolor, #3c484d);
 	border-radius: 0.5rem;
-	background: #20282c;
+	background: var(--background, #20282c);
 	box-shadow: 0 0.75rem 1.75rem rgba(0, 0, 0, 0.36);
 }
 .ident-switch-option {
@@ -164,7 +177,7 @@
 	padding: 0.5rem 0.6rem;
 	border: 0;
 	border-radius: 0.35rem;
-	color: #e9edef;
+	color: var(--font, #e9edef);
 	background: transparent;
 	-webkit-appearance: none;
 	appearance: none;
@@ -177,12 +190,12 @@
 }
 .ident-switch-option:hover,
 .ident-switch-option:focus {
-	color: #fff;
-	background: #303c41;
+	color: var(--font, #fff);
+	background: var(--backgroundhover, #303c41);
 	outline: none;
 }
 .ident-switch-option.is-active {
-	background: #35484f;
+	background: var(--backgroundhoverlight, #35484f);
 }
 .ident-switch-option-label {
 	min-width: 0;

@@ -2,7 +2,7 @@
  * ident_switch - Account switcher UI and new mail notifications.
  *
  * Places the hidden <select> from the footer into the appropriate
- * skin location (Larry, Classic, Elastic), shows it, and registers
+ * skin location (Larry, Classic, or an Elastic-family username slot), shows it, and registers
  * notification listeners for background mail checking.
  *
  * Copyright (C) 2016-2018 Boris Gulay
@@ -23,26 +23,20 @@ $(function() {
 	var $sw = $wrapper.find('#plugin-ident_switch-account');
 	var placed = false;
 	var enhanced = false;
+	var $elasticTarget = plugin_switchIdent_elasticTarget();
 
 	// Keep the select as the source of truth and as a fallback for older skins.
 	$sw.find('option').each(function() {
 		$(this).data('orig-text', $(this).text());
 	});
 
-	if (rcmail.env.skin === 'elastic') {
+	if ($elasticTarget.length) {
 		enhanced = ident_switch_buildMenu($wrapper, $sw);
-	}
-
-	switch (rcmail.env.skin) {
-		case 'larry':
-			placed = plugin_switchIdent_addCbLarry($wrapper, $sw);
-			break;
-		case 'classic':
-			placed = plugin_switchIdent_addCbClassic($wrapper, $sw);
-			break;
-		case 'elastic':
-			placed = plugin_switchIdent_addCbElastic($wrapper, $sw);
-			break;
+		placed = plugin_switchIdent_addCbElastic($wrapper, $sw, $elasticTarget);
+	} else if ($('#topline .topright').length) {
+		placed = plugin_switchIdent_addCbLarry($wrapper, $sw);
+	} else if ($('#taskbar').length) {
+		placed = plugin_switchIdent_addCbClassic($wrapper, $sw);
 	}
 
 	if (!placed) {
@@ -248,14 +242,14 @@ function plugin_switchIdent_addCbClassic($wrapper) {
 }
 
 /**
- * Place switcher in Elastic skin: replace username in header.
+ * Find an Elastic-family username slot by its DOM contract, not the skin name.
  */
-function plugin_switchIdent_addCbElastic($wrapper, $sw) {
-	var $target = $('.header-title.username');
-	if (!$target.length) {
-		return false;
-	}
+function plugin_switchIdent_elasticTarget() {
+	var $target = $('#layout-sidebar > .header-title.username').first();
+	return $target.length ? $target : $('.header-title.username').first();
+}
 
+function plugin_switchIdent_addCbElastic($wrapper, $sw, $target) {
 	$sw.css({
 		'background-color': 'transparent',
 		'border': 'none',

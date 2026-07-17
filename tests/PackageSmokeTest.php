@@ -27,10 +27,12 @@ final class PackageSmokeTest extends TestCase
         );
         self::assertStringContainsString('default: ' . $version, $launcher);
 
+        self::assertSame(1, preg_match('/-rc\.([0-9]+)\z/', $version, $releaseMatch));
         $plugin = (string) file_get_contents($root . '/plugins/ident_switch/ident_switch.php');
-        $stylesheet = $root . '/plugins/ident_switch/ident_switch-rc14.css';
+        $stylesheetName = 'ident_switch-rc' . $releaseMatch[1] . '.css';
+        $stylesheet = $root . '/plugins/ident_switch/' . $stylesheetName;
         self::assertFileExists($stylesheet);
-        self::assertStringContainsString('ident_switch-rc14.css', $plugin);
+        self::assertStringContainsString($stylesheetName, $plugin);
         self::assertStringContainsString('ident_switch-switch.js?v=' . $version, $plugin);
         self::assertStringContainsString('ident_switch.css?v=' . $version, (string) file_get_contents($stylesheet));
     }
@@ -38,6 +40,18 @@ final class PackageSmokeTest extends TestCase
     public function testSharedPackageIsAutoloadable(): void
     {
         self::assertSame('imap', CredentialPurpose::Imap->value);
+    }
+
+    public function testAccountSwitcherSupportsElasticFamilyWithoutLayoutShift(): void
+    {
+        $root = dirname(__DIR__) . '/plugins/ident_switch/';
+        $script = (string) file_get_contents($root . 'ident_switch-switch.js');
+        $stylesheet = (string) file_get_contents($root . 'ident_switch.css');
+
+        self::assertStringContainsString("$('#layout-sidebar > .header-title.username')", $script);
+        self::assertStringNotContainsString("rcmail.env.skin === 'elastic'", $script);
+        self::assertStringContainsString('#layout-sidebar > .header-title.username', $stylesheet);
+        self::assertStringContainsString('flex: 0 0 3.25rem', $stylesheet);
     }
 
     public function testPackageIsAStandardRoundcubePlugin(): void
