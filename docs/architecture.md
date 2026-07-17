@@ -136,9 +136,9 @@ binding and preferred changes. Application checks alone are not sufficient.
    renewable runtime token sink into the shared tmpfs.
 3. The shared tmpfs follows the operator's established Agent pattern. Limit its
    mounts to the Agent and Roundcube services and mount it read-only in Roundcube.
-4. Current SMTP is STARTTLS on port 587, while the target brief specifies
-   implicit TLS on 465. The packaged runtime config uses and tests
-   `ssl://smtp.purelymail.com:465`.
+4. SMTP and provisioning validation use STARTTLS on port 587. The validator
+   requires STARTTLS to be advertised and successfully negotiates TLS before
+   sending credentials.
 5. SQLite is suitable for the current single replica, but migrations and tests
    still cover all three claimed database families.
 

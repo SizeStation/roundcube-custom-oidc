@@ -803,6 +803,8 @@ final class Application
     {
         return match (true) {
             $exception instanceof \InvalidArgumentException => 'invalid_argument',
+            $exception instanceof MailboxValidationException => $exception->errorCode,
+            $exception instanceof ExternalCredentialException => $exception->errorCode,
             $exception instanceof RuntimeException => 'operation_rejected',
             default => 'operation_failed',
         };

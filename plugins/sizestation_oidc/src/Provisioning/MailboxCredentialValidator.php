@@ -15,8 +15,8 @@ final class MailboxCredentialValidator
         private readonly string $smtpEndpoint,
         private readonly int $timeoutSeconds = 10,
     ) {
-        $this->parseEndpoint($imapEndpoint);
-        $this->parseEndpoint($smtpEndpoint);
+        $this->parseEndpoint($imapEndpoint, false);
+        $this->parseEndpoint($smtpEndpoint, true);
         if ($timeoutSeconds < 1 || $timeoutSeconds > 60) {
             throw new RuntimeException('Mailbox validation timeout is invalid');
         }
@@ -34,7 +34,7 @@ final class MailboxCredentialValidator
 
     private function validateImap(string $username, string $password): void
     {
-        $stream = $this->connect($this->imapEndpoint);
+        $stream = $this->connect($this->imapEndpoint, false);
         $payload = '';
         try {
             $greeting = $this->readLine($stream);
@@ -66,15 +66,42 @@ final class MailboxCredentialValidator
 
     private function validateSmtp(string $username, string $password): void
     {
-        $stream = $this->connect($this->smtpEndpoint);
+        [, , $scheme] = $this->parseEndpoint($this->smtpEndpoint, true);
+        $stream = $this->connect($this->smtpEndpoint, true);
         $payload = '';
         try {
             if (!$this->responseCode($this->readResponse($stream), 220)) {
                 throw new MailboxValidationException('smtp_unavailable', CredentialFailureKind::Unavailable);
             }
             $this->write($stream, "EHLO roundcube.sizestation.invalid\r\n");
-            if (!$this->responseCode($this->readResponse($stream), 250)) {
+            $capabilities = $this->readResponse($stream);
+            if (!$this->responseCode($capabilities, 250)) {
                 throw new MailboxValidationException('smtp_unavailable', CredentialFailureKind::Unavailable);
+            }
+            if ($scheme === 'tcp') {
+                if (preg_match('/^250[ -]STARTTLS\r?$/mi', $capabilities) !== 1) {
+                    throw new MailboxValidationException(
+                        'smtp_starttls_unavailable',
+                        CredentialFailureKind::Unavailable,
+                    );
+                }
+                $this->write($stream, "STARTTLS\r\n");
+                if (!$this->responseCode($this->readResponse($stream), 220)) {
+                    throw new MailboxValidationException(
+                        'smtp_starttls_unavailable',
+                        CredentialFailureKind::Unavailable,
+                    );
+                }
+                if (@stream_socket_enable_crypto($stream, true, STREAM_CRYPTO_METHOD_TLS_CLIENT) !== true) {
+                    throw new MailboxValidationException(
+                        'smtp_starttls_failed',
+                        CredentialFailureKind::Unavailable,
+                    );
+                }
+                $this->write($stream, "EHLO roundcube.sizestation.invalid\r\n");
+                if (!$this->responseCode($this->readResponse($stream), 250)) {
+                    throw new MailboxValidationException('smtp_unavailable', CredentialFailureKind::Unavailable);
+                }
             }
             $payload = base64_encode("\0{$username}\0{$password}");
             $this->write($stream, "AUTH PLAIN {$payload}\r\n");
@@ -94,9 +121,9 @@ final class MailboxCredentialValidator
     }
 
     /** @return resource */
-    private function connect(string $endpoint)
+    private function connect(string $endpoint, bool $allowStartTls)
     {
-        [$host] = $this->parseEndpoint($endpoint);
+        [$host] = $this->parseEndpoint($endpoint, $allowStartTls);
         $context = stream_context_create(['ssl' => [
             'verify_peer' => true,
             'verify_peer_name' => true,
@@ -120,18 +147,20 @@ final class MailboxCredentialValidator
         return $stream;
     }
 
-    /** @return array{string, int} */
-    private function parseEndpoint(string $endpoint): array
+    /** @return array{string, int, string} */
+    private function parseEndpoint(string $endpoint, bool $allowStartTls): array
     {
         $parts = parse_url($endpoint);
+        $scheme = is_array($parts) ? ($parts['scheme'] ?? null) : null;
         if (
-            !is_array($parts) || ($parts['scheme'] ?? null) !== 'ssl' || empty($parts['host'])
+            !is_array($parts) || !in_array($scheme, ['ssl', 'tcp'], true) || empty($parts['host'])
             || !isset($parts['port']) || isset($parts['user']) || isset($parts['pass'])
+            || ($scheme === 'tcp' && !$allowStartTls)
         ) {
-            throw new RuntimeException('Mailbox validation endpoint must use fixed implicit TLS');
+            throw new RuntimeException('Mailbox validation endpoint must use implicit TLS or SMTP STARTTLS');
         }
 
-        return [(string) $parts['host'], (int) $parts['port']];
+        return [(string) $parts['host'], (int) $parts['port'], (string) $scheme];
     }
 
     /** @param resource $stream */

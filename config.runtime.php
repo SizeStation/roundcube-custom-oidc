@@ -117,7 +117,7 @@ $config['sizestation_oidc.openbao_provisioning_approle_mount'] = $sizeStationEnv
 $config['sizestation_oidc.validate_imap_on_provision'] = true;
 $config['sizestation_oidc.validate_smtp_on_provision'] = true;
 $config['sizestation_oidc.validation_imap_endpoint'] = 'ssl://imap.purelymail.com:993';
-$config['sizestation_oidc.validation_smtp_endpoint'] = 'ssl://smtp.purelymail.com:465';
+$config['sizestation_oidc.validation_smtp_endpoint'] = 'tcp://smtp.purelymail.com:587';
 $config['sizestation_oidc.validation_timeout_seconds'] = 10;
 
 $config['ident_switch.managed_only'] = true;
