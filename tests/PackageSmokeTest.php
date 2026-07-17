@@ -9,6 +9,32 @@ use SizeStation\Roundcube\Credentials\CredentialPurpose;
 
 final class PackageSmokeTest extends TestCase
 {
+    public function testReleaseVersionMatchesDeploymentPins(): void
+    {
+        $root = dirname(__DIR__);
+        $version = trim((string) file_get_contents($root . '/RELEASE_VERSION'));
+        $stack = (string) file_get_contents($root . '/deployment/stack.yml');
+        $launcher = (string) file_get_contents($root . '/bin/roundcube-oidc-admin');
+
+        self::assertMatchesRegularExpression('/\A[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+\z/', $version);
+        self::assertStringContainsString(
+            'sizestation/roundcube-oidc-suite:' . $version . ',',
+            $stack,
+        );
+        self::assertStringContainsString(
+            'ROUNDCUBE_OIDC_ADMIN_VERSION:-' . $version,
+            $launcher,
+        );
+        self::assertStringContainsString('default: ' . $version, $launcher);
+
+        $plugin = (string) file_get_contents($root . '/plugins/ident_switch/ident_switch.php');
+        $stylesheet = $root . '/plugins/ident_switch/ident_switch-rc14.css';
+        self::assertFileExists($stylesheet);
+        self::assertStringContainsString('ident_switch-rc14.css', $plugin);
+        self::assertStringContainsString('ident_switch-switch.js?v=' . $version, $plugin);
+        self::assertStringContainsString('ident_switch.css?v=' . $version, (string) file_get_contents($stylesheet));
+    }
+
     public function testSharedPackageIsAutoloadable(): void
     {
         self::assertSame('imap', CredentialPurpose::Imap->value);

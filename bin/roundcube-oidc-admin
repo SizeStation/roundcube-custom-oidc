@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-VERSION="${ROUNDCUBE_OIDC_ADMIN_VERSION:-1.0.0-rc.12}"
+VERSION="${ROUNDCUBE_OIDC_ADMIN_VERSION:-1.0.0-rc.14}"
 IMAGE="${ROUNDCUBE_OIDC_ADMIN_IMAGE:-roundcube/roundcubemail:1.7.x-apache}"
 ISSUER="${ROUNDCUBE_OIDC_ISSUER:-https://auth.sizestation.com/application/o/roundcube/}"
 OPENBAO_ADDRESS="${ROUNDCUBE_OPENBAO_ADDRESS:-https://bao.sizestation.cloud}"
@@ -52,7 +52,7 @@ Configuration environment variables:
   ROUNDCUBE_OIDC_PROVISIONING_TOKEN_FILE  default: /root/.secrets/openbao-provisioning-token
   ROUNDCUBE_OIDC_ISSUER                   default: https://auth.sizestation.com/application/o/roundcube/
   ROUNDCUBE_OPENBAO_ADDRESS               default: https://bao.sizestation.cloud
-  ROUNDCUBE_OIDC_ADMIN_VERSION            default: 1.0.0-rc.12
+  ROUNDCUBE_OIDC_ADMIN_VERSION            default: 1.0.0-rc.14
   ROUNDCUBE_OIDC_ADMIN_FORMAT             human or json; default: human
 USAGE
 }

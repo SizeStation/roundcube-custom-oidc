@@ -82,6 +82,8 @@ git push origin v1.0.0
 ```
 
 Set `ROUNDCUBEMAIL_COMPOSER_PLUGINS` to that exact package version in the stack.
+The repository's `RELEASE_VERSION`, production stack pin, and administration
+launcher default are kept in lockstep by the package test suite.
 The official Roundcube entrypoint invokes Composer. Because the package is type
 `roundcube-plugin`, Roundcube's official plugin installer places it directly in
 `plugins/roundcube_oidc_suite`, creates its config stub, and invokes the
