@@ -100,6 +100,8 @@ final class PackageSmokeTest extends TestCase
         $launcher = (string) file_get_contents(dirname(__DIR__) . '/bin/roundcube-oidc-admin');
 
         self::assertStringContainsString('add-email SUB MAILBOX', $launcher);
+        self::assertStringContainsString('dedupe-email MAILBOX', $launcher);
+        self::assertStringContainsString('credential:consolidate', $launcher);
         self::assertStringContainsString('--reuse-existing', $launcher);
         self::assertStringContainsString('reusable_credential_not_found', $launcher);
         self::assertStringContainsString('users)', $launcher);

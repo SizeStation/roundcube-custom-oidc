@@ -59,6 +59,18 @@ bin/roundcube-oidc-admin add-email AUTHENTIK_SUB admin@sizestation.com
 For an initialized principal, newly created assignments bind and reconcile
 immediately; another OIDC login is not required.
 
+Consolidate credentials that were provisioned more than once before rc18:
+
+```sh
+bin/roundcube-oidc-admin --dry-run dedupe-email contact@sizestation.com
+bin/roundcube-oidc-admin dedupe-email contact@sizestation.com
+```
+
+The command validates the canonical credential, transactionally repoints every
+assignment and managed switch record for that mailbox, and only then deletes
+OpenBao paths that are no longer referenced. It does not remove any mailbox
+assignment.
+
 ## Rotate and validate
 
 ```sh

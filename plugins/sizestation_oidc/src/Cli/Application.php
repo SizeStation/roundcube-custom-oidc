@@ -51,6 +51,7 @@ final class Application
             $result = match ($command) {
                 'provision', 'assignment:create' => $this->provision($options, $stdin),
                 'rotate', 'assignment:rotate-secret' => $this->rotate($options, $stdin),
+                'credential:consolidate' => $this->consolidateCredential($options),
                 'validate', 'assignment:validate' => $this->validate($options),
                 'disable', 'assignment:disable' => $this->disable($options),
                 'assignment:enable' => $this->enableAssignment($options),
@@ -263,6 +264,121 @@ final class Application
             return ['ok' => true, 'assignment_id' => $assignment['id'], 'credential_status' => 'valid'];
         } finally {
             $this->erase($password);
+        }
+    }
+
+    /** @param array<string, string|bool> $options
+     *  @return array<string, mixed>
+     */
+    private function consolidateCredential(array $options): array
+    {
+        $mailbox = (string) new MailboxAddress($this->required($options, 'mailbox'));
+        $repository = new AdminRepository($this->database);
+        $references = $repository->reusableCredentialReferences($mailbox);
+        if ($references === []) {
+            throw new ReusableCredentialNotFoundException(
+                'No previously provisioned credential exists for this mailbox',
+            );
+        }
+
+        $requested = $options['credential-reference'] ?? null;
+        if ($requested !== null && (!is_string($requested) || !in_array($requested, $references, true))) {
+            throw new RuntimeException('Requested canonical credential is not assigned to this mailbox');
+        }
+        $candidates = is_string($requested) ? [$requested] : $references;
+        $reference = null;
+        $credentials = null;
+        $lastFailure = null;
+        try {
+            foreach ($candidates as $candidate) {
+                try {
+                    $reference = new CredentialReference($candidate);
+                    $credentials = ($this->credentialResolver)([
+                        'id' => '00000000-0000-4000-8000-000000000000',
+                        'mailbox_address' => $mailbox,
+                        'credential_provider' => 'openbao',
+                        'credential_reference' => $reference->value,
+                        'managed_externally' => 1,
+                    ]);
+                    $this->assertMailboxUsername($mailbox, $credentials->imapUsername());
+                    $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
+                    break;
+                } catch (\Throwable $exception) {
+                    $credentials?->erase();
+                    $credentials = null;
+                    $reference = null;
+                    $lastFailure = $exception;
+                }
+            }
+            if ($reference === null) {
+                throw $lastFailure ?? new RuntimeException('No valid credential could be selected');
+            }
+
+            $oldReferences = array_values(array_diff($references, [$reference->value]));
+            if (!empty($options['dry-run'])) {
+                return [
+                    'ok' => true,
+                    'dry_run' => true,
+                    'command' => 'credential:consolidate',
+                    'mailbox' => $mailbox,
+                    'canonical_reference' => $reference->value,
+                    'database_changes' => ['repoint mailbox assignments and managed switch records'],
+                    'openbao_paths' => !empty($options['delete-old-secrets']) ? $oldReferences : [],
+                    'validation_actions' => array_merge(
+                        ['read canonical OpenBao credential'],
+                        $this->validationActions(),
+                    ),
+                ];
+            }
+
+            $result = $repository->consolidateMailboxCredential($mailbox, $reference->value);
+            foreach ($result['assignments'] as $assignment) {
+                if ((string) $assignment['credential_reference'] === $reference->value) {
+                    continue;
+                }
+                $this->auditRepository()->record(
+                    AuditEvent::CredentialConsolidated,
+                    'cli',
+                    'administrator',
+                    $assignment['principal_id'] === null ? null : (int) $assignment['principal_id'],
+                    (string) $assignment['id'],
+                    [
+                        'mailbox' => $mailbox,
+                        'old_reference' => (string) $assignment['credential_reference'],
+                        'canonical_reference' => $reference->value,
+                    ],
+                );
+            }
+
+            $deleted = [];
+            $retained = [];
+            foreach ($result['old_references'] as $oldReference) {
+                if (
+                    empty($options['delete-old-secrets'])
+                    || $repository->credentialReferenceInUse('openbao', $oldReference)
+                ) {
+                    $retained[] = $oldReference;
+                    continue;
+                }
+                try {
+                    $this->provisioner->delete(new CredentialReference($oldReference));
+                    $deleted[] = $oldReference;
+                } catch (\Throwable) {
+                    $retained[] = $oldReference;
+                }
+            }
+
+            return [
+                'ok' => true,
+                'mailbox' => $mailbox,
+                'canonical_reference' => $reference->value,
+                'assignments_updated' => count($result['assignments']),
+                'old_references_deleted' => $deleted,
+                'old_references_retained' => $retained,
+                'already_consolidated' => $result['old_references'] === [],
+            ];
+        } finally {
+            $credentials?->erase();
         }
     }
 
@@ -949,6 +1065,8 @@ Commands:
   assignment:set-anchor|assignment:set-preferred|assignment:clear-preferred --assignment-id UUID
   assignment:validate --assignment-id UUID
   assignment:rotate-secret --assignment-id UUID --password-stdin [--username ADDRESS]
+  credential:consolidate --mailbox ADDRESS [--credential-reference PATH]
+                         [--delete-old-secrets]
   sync:user|reconcile:user --principal-id ID
   sync:all|reconcile:all
   audit:list [--principal-id ID] [--limit NUMBER]

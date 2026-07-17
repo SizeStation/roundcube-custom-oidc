@@ -190,6 +190,68 @@ final class CliApplicationTest extends TestCase
         )->fetchColumn());
     }
 
+    public function testConsolidateCredentialRepointsExistingAssignmentsAndDeletesOnlyRedundantPath(): void
+    {
+        [$firstExit] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=contact@example.test',
+            '--credential-reference=mailboxes/contact-a', '--password-stdin', '--json',
+        ], "first-secret\n");
+        [$secondExit] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-2', '--mailbox=contact@example.test',
+            '--credential-reference=mailboxes/contact-b', '--password-stdin', '--json',
+        ], "second-secret\n");
+        [$consolidateExit, $output, $error] = $this->runApplication([
+            'sizestation-oidc', 'credential:consolidate',
+            '--mailbox=contact@example.test', '--delete-old-secrets', '--json',
+        ], '');
+
+        self::assertSame(0, $firstExit);
+        self::assertSame(0, $secondExit);
+        self::assertSame(0, $consolidateExit);
+        self::assertSame('', $error);
+        $result = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('mailboxes/contact-a', $result['canonical_reference']);
+        self::assertSame(['mailboxes/contact-b'], $result['old_references_deleted']);
+        self::assertSame([], $result['old_references_retained']);
+        self::assertSame(2, (int) $this->database->pdo->query(
+            "SELECT COUNT(*) FROM sizestation_mailbox_assignments"
+            . " WHERE credential_reference = 'mailboxes/contact-a'",
+        )->fetchColumn());
+        self::assertSame(0, (int) $this->database->pdo->query(
+            "SELECT COUNT(*) FROM sizestation_mailbox_assignments"
+            . " WHERE credential_reference = 'mailboxes/contact-b'",
+        )->fetchColumn());
+        self::assertContains('mailboxes/contact-b', $this->provisioner->deletes);
+    }
+
+    public function testConsolidateCredentialDryRunDoesNotRewriteOrDelete(): void
+    {
+        foreach (['a', 'b'] as $index => $suffix) {
+            [$exit] = $this->runApplication([
+                'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+                '--external-user-id=external-' . ($index + 1), '--mailbox=contact@example.test',
+                '--credential-reference=mailboxes/contact-' . $suffix, '--password-stdin', '--json',
+            ], "secret-{$suffix}\n");
+            self::assertSame(0, $exit);
+        }
+
+        [$exit, $output] = $this->runApplication([
+            'sizestation-oidc', 'credential:consolidate', '--mailbox=contact@example.test',
+            '--delete-old-secrets', '--dry-run', '--json',
+        ], '');
+
+        self::assertSame(0, $exit);
+        $result = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+        self::assertTrue($result['dry_run']);
+        self::assertSame(['mailboxes/contact-b'], $result['openbao_paths']);
+        self::assertSame(2, (int) $this->database->pdo->query(
+            'SELECT COUNT(DISTINCT credential_reference) FROM sizestation_mailbox_assignments',
+        )->fetchColumn());
+        self::assertSame([], $this->provisioner->deletes);
+    }
+
     public function testExistingSecretUsernameMustMatchTheMailbox(): void
     {
         [$exit, $stdout, $stderr] = $this->runApplication([

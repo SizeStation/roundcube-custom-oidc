@@ -121,6 +121,99 @@ final class AdminRepository
         return is_array($this->database->fetch_assoc($query));
     }
 
+    public function credentialReferenceInUse(string $provider, string $reference): bool
+    {
+        $query = $this->database->query(
+            'SELECT id FROM ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' WHERE credential_provider = ? AND credential_reference = ?',
+            $provider,
+            $reference,
+        );
+
+        return is_array($this->database->fetch_assoc($query));
+    }
+
+    /**
+     * @return array{
+     *   assignments: list<array<string, mixed>>,
+     *   old_references: list<string>,
+     *   canonical_reference: string
+     * }
+     */
+    public function consolidateMailboxCredential(string $mailbox, string $canonicalReference): array
+    {
+        $mailbox = (string) new MailboxAddress($mailbox);
+        $query = $this->database->query(
+            'SELECT * FROM ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' WHERE mailbox_address = ? AND credential_provider = ? ORDER BY id',
+            $mailbox,
+            'openbao',
+        );
+        $assignments = [];
+        $references = [];
+        while ($row = $this->database->fetch_assoc($query)) {
+            $assignments[] = $row;
+            $references[(string) $row['credential_reference']] = true;
+        }
+        if (!isset($references[$canonicalReference])) {
+            throw new RuntimeException('Canonical credential is not assigned to this mailbox');
+        }
+        $oldReferences = array_values(array_diff(array_keys($references), [$canonicalReference]));
+        if ($oldReferences === []) {
+            return [
+                'assignments' => $assignments,
+                'old_references' => [],
+                'canonical_reference' => $canonicalReference,
+            ];
+        }
+
+        if (!$this->database->startTransaction()) {
+            throw new RepositoryException('Unable to start credential consolidation transaction');
+        }
+        try {
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $updated = $this->database->query(
+                'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
+                . ' SET credential_reference = ?, credential_status = ?, last_validated_at = ?,'
+                . ' last_error_code = NULL, updated_at = ?'
+                . ' WHERE mailbox_address = ? AND credential_provider = ?',
+                $canonicalReference,
+                'valid',
+                $now,
+                $now,
+                $mailbox,
+                'openbao',
+            );
+            if (!$updated || $this->database->affected_rows($updated) < 1) {
+                throw new RepositoryException('Unable to consolidate mailbox assignments');
+            }
+            foreach ($assignments as $assignment) {
+                $switch = $this->database->query(
+                    'UPDATE ' . $this->database->table_name('ident_switch')
+                    . ' SET credential_reference = ?'
+                    . ' WHERE managed_assignment_id = ? AND managed_externally = 1',
+                    $canonicalReference,
+                    (string) $assignment['id'],
+                );
+                if (!$switch) {
+                    throw new RepositoryException('Unable to consolidate managed switch records');
+                }
+            }
+            if (!$this->database->endTransaction()) {
+                throw new RepositoryException('Unable to commit credential consolidation');
+            }
+        } catch (\Throwable $exception) {
+            $this->database->rollbackTransaction();
+            throw $exception;
+        }
+
+        return [
+            'assignments' => $assignments,
+            'old_references' => $oldReferences,
+            'canonical_reference' => $canonicalReference,
+        ];
+    }
+
     /** @return array<string, mixed>|null */
     public function assignment(string $assignmentId): ?array
     {

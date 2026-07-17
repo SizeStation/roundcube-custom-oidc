@@ -21,6 +21,7 @@ enum AuditEvent: string
     case PreferredAccountChanged = 'preferred_account_changed';
     case MailboxSwitch = 'mailbox_switch';
     case CredentialRotated = 'credential_rotated';
+    case CredentialConsolidated = 'credential_consolidated';
     case CredentialValidationSuccess = 'credential_validation_success';
     case CredentialValidationFailure = 'credential_validation_failure';
     case OpenBaoUnavailable = 'openbao_unavailable';
