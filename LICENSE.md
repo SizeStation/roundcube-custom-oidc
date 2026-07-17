@@ -8,5 +8,5 @@ Free Software Foundation, either version 3 of the License, or (at your option)
 any later version.
 
 The complete licence text is retained at `plugins/ident_switch/LICENSE` and is
-part of every source checkout and custom image. Upstream-originated files retain
+part of every source checkout and Composer package. Upstream-originated files retain
 their own copyright and licence notices.

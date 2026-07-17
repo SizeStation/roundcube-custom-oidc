@@ -18,9 +18,7 @@ auto_auth {
   sink "file" {
     config = {
       path = "/run/app-secrets/openbao-token"
-      mode = 0640
-      uid  = 33
-      gid  = 33
+      mode = 0644
     }
   }
 }
@@ -32,7 +30,7 @@ template_config {
 
 template {
   destination          = "/run/app-secrets/roundcube-des-key"
-  perms                = "0640"
+  perms                = "0644"
   backup               = false
   error_on_missing_key = true
   contents             = "{{ with secret \"kv/data/roundcube/des_key\" }}{{ .Data.data.config }}{{ end }}"
@@ -40,7 +38,7 @@ template {
 
 template {
   destination          = "/run/app-secrets/oidc-client-secret"
-  perms                = "0640"
+  perms                = "0644"
   backup               = false
   error_on_missing_key = true
   contents             = "{{ with secret \"kv/data/roundcube/oidc\" }}{{ .Data.data.client_secret }}{{ end }}"

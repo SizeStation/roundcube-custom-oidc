@@ -1,36 +1,26 @@
 # Verification report
 
-Verified on 2026-07-17 through Git commit `aa7aa45` and the pinned Roundcube
-1.7.2 / PHP 8.4.23 base. Production remained untouched.
+Verified on 2026-07-17 against the official Roundcube 1.7.2 image. Production
+remained untouched.
 
 ## Automated and build evidence
 
-- PHPUnit: **111 tests, 319 assertions**, all passing from a fresh clone of the
-  pushed commit.
+- PHPUnit: **112 tests, 325 assertions**, all passing from a clean locked install.
 - PHPCS: **84 files**, all passing.
-- Fresh SQLite plugin migrations: both initializers reported `[OK]` on a
-  disposable named volume using the documented entrypoint commands.
+- Fresh SQLite plugin migration: Roundcube's official Composer installer
+  reported `[OK]` and created both internal schemas from the combined SQL set.
 - Fresh PostgreSQL 16 and MariaDB 11 schemas: both plugin schemas applied to
   isolated containers and recorded `ident_switch-version=2026071600` and
   `sizestation_oidc-version=2026071602`.
 - The single `sizestation/roundcube-oidc-suite` package passed strict Composer
-  validation, a clean locked install, and its stock-container bundle installer
-  test. The installer placed both plugins and CLI and requested both migrations.
-- The optional fallback image built successfully with both base images pinned by digest,
-  Elastic2022 pinned by commit and archive checksum, production Composer
-  dependencies installed at build time, licences included, OIDC autoload
-  asserted, and CLI syntax asserted.
-- Local verification image manifest-list digest:
-  `sha256:0a8b00da011edc94f587818229cfd974f4ad4bda56cf5ad819bb2c381c84095d`.
-  This is not a registry digest and must not be placed in the production stack.
-- CLI help completed through the real Roundcube Docker entrypoint.
-- The earlier custom-image path passed PHP syntax, CLI, and fresh SQLite schema
-  smoke checks; it is no longer the primary production installation path.
+  validation and a clean locked install. Roundcube installed it directly at
+  `plugins/roundcube_oidc_suite`; its one entrypoint loaded OIDC, shared
+  credentials, and account switching successfully. No copy script or custom
+  image participated.
 - `docker stack config` rendered the supplied Swarm file successfully with the
   intended runtime secret paths and config sources.
-- OpenBao Agent HCL started as UID/GID 33 on the protected tmpfs, created its
-  token sink as `0640`, and reached its auth loop; the test intentionally did
-  not mount AppRole credentials.
+- OpenBao Agent uses the operator's existing shared-tmpfs pattern and renders
+  files readable by the Roundcube container; AppRole still controls OpenBao access.
 - TLS `bao status` succeeded from both `public` and `openbao` overlays against
   `https://bao.sizestation.cloud`.
 
@@ -56,7 +46,7 @@ materialization, transactional fail-closed disable/remove behavior, automatic
 return from a disabled active secondary mailbox, correct transient mailbox
 validation classification during reconciliation, same-origin OIDC discovery
 endpoints, a no-preference mailbox chooser that delegates to `ident_switch`,
-and Swarm co-location for the Agent's node-local secret tmpfs.
+and the simplified standard-plugin Swarm deployment.
 
 The final production end-to-end acceptance run is deliberately pending external
 configuration. The Authentik discovery URL

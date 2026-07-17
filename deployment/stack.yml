@@ -1,7 +1,6 @@
 services:
   roundcube-bao-agent:
     image: openbao/openbao:2.5.5
-    user: "33:33"
     command: ["agent", "-config=/etc/openbao/agent.hcl"]
     configs:
       - source: roundcube_bao_agent
@@ -14,9 +13,6 @@ services:
     networks: [openbao]
     deploy:
       replicas: 1
-      placement:
-        constraints:
-          - node.labels.roundcube.secrets == true
       restart_policy: {condition: any, delay: 5s}
 
   roundcube:
@@ -34,28 +30,20 @@ services:
       ROUNDCUBE_OIDC_CLIENT_SECRET_FILE: "/run/app-secrets/oidc-client-secret"
       ROUNDCUBE_OIDC_REDIRECT_URI: "https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback"
       ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://mail.sizestation.cloud/"
-      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.4,seb1k/elastic2022:^1.7"
-      ROUNDCUBEMAIL_PLUGINS: "archive,zipdownload,sizestation_oidc,ident_switch"
+      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.5,seb1k/elastic2022:^1.7"
+      ROUNDCUBEMAIL_PLUGINS: "archive,zipdownload,roundcube_oidc_suite"
       ROUNDCUBEMAIL_SKIN: elastic2022
       ROUNDCUBEMAIL_DB_TYPE: sqlite
       ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE: 25M
-      # Verified current `public` overlay CIDR; update if the network is recreated.
-      ROUNDCUBE_PROXY_WHITELIST: "10.0.1.0/24"
     configs:
       - source: roundcube_oidc_config
         target: /var/roundcube/config/sizestation_oidc.php
-      - source: roundcube_suite_installer
-        target: /entrypoint-tasks/post-setup/50-install-roundcube-oidc-suite.sh
-        mode: 0555
     volumes:
       - roundcube_db:/var/roundcube/db
       - roundcube-bao-files:/run/app-secrets:ro
     networks: [public]
     deploy:
       replicas: 1
-      placement:
-        constraints:
-          - node.labels.roundcube.secrets == true
       restart_policy: {condition: any, delay: 5s}
       update_config:
         order: stop-first
@@ -76,7 +64,7 @@ volumes:
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: size=2m,mode=0770,uid=33,gid=33,nosuid,nodev,noexec
+      o: size=1m,mode=1777,nosuid,nodev,noexec
 
 networks:
   public: {external: true}
@@ -85,7 +73,6 @@ networks:
 configs:
   roundcube_bao_agent: {file: ./roundcube-agent.hcl}
   roundcube_oidc_config: {file: ./roundcube-config.inc.php}
-  roundcube_suite_installer: {file: ./install-suite.sh}
 
 secrets:
   roundcube_bao_role_id: {external: true}

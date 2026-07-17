@@ -27,7 +27,7 @@ docker run --rm -i --network public \
 
 Remove the token file immediately after the administration window. The
 long-running web service never receives it. In the examples below,
-`/var/www/html/bin/sizestation-oidc ...` denotes the `COMMAND_AND_OPTIONS` tail
+`/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc ...` denotes the `COMMAND_AND_OPTIONS` tail
 inside that one-shot container.
 
 ## Provision before first login
@@ -37,7 +37,7 @@ exactly one anchor; the anchor is permanent after first successful login.
 
 ```sh
 read -s MAIL_PASSWORD
-printf '%s' "$MAIL_PASSWORD" | /var/www/html/bin/sizestation-oidc provision \
+printf '%s' "$MAIL_PASSWORD" | /var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc provision \
   --issuer https://auth.sizestation.cloud/application/o/roundcube/ \
   --external-user-id AUTHENTIK_UUID \
   --mailbox user@sizestation.com \
@@ -56,7 +56,7 @@ identity, omit `--password-stdin`. The CLI reads and validates the existing
 secret but never rewrites or deletes it:
 
 ```sh
-/var/www/html/bin/sizestation-oidc assignment:create \
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc assignment:create \
   --issuer https://auth.sizestation.cloud/application/o/roundcube/ \
   --external-user-id AUTHENTIK_UUID \
   --mailbox admin@sizestation.com \
@@ -71,10 +71,10 @@ immediately; another OIDC login is not required.
 
 ```sh
 read -s MAIL_PASSWORD
-printf '%s' "$MAIL_PASSWORD" | /var/www/html/bin/sizestation-oidc rotate \
+printf '%s' "$MAIL_PASSWORD" | /var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc rotate \
   --assignment-id ASSIGNMENT_UUID --password-stdin --json
 unset MAIL_PASSWORD
-/var/www/html/bin/sizestation-oidc validate \
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc validate \
   --assignment-id ASSIGNMENT_UUID --json
 ```
 
@@ -84,10 +84,10 @@ only for their current PHP request; the next request resolves the new version.
 ## Preferred, disable, remove, and principal controls
 
 ```sh
-/var/www/html/bin/sizestation-oidc set-preferred --assignment-id UUID --json
-/var/www/html/bin/sizestation-oidc disable --assignment-id UUID --json
-/var/www/html/bin/sizestation-oidc remove --assignment-id UUID --json
-/var/www/html/bin/sizestation-oidc disable-principal --principal-id ID --json
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc set-preferred --assignment-id UUID --json
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc disable --assignment-id UUID --json
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc remove --assignment-id UUID --json
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc disable-principal --principal-id ID --json
 ```
 
 Do not disable/remove the only enabled anchor. `remove` retires the database
@@ -99,9 +99,9 @@ procedure.
 ## Reconcile and audit
 
 ```sh
-/var/www/html/bin/sizestation-oidc reconcile:user --principal-id ID --format json
-/var/www/html/bin/sizestation-oidc reconcile:all --format json
-/var/www/html/bin/sizestation-oidc audit:list --principal-id ID --limit 100 --format json
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc reconcile:user --principal-id ID --format json
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc reconcile:all --format json
+/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc audit:list --principal-id ID --limit 100 --format json
 ```
 
 Reconciliation is idempotent. It repairs missing managed identities and switch

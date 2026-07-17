@@ -25,7 +25,7 @@ $envOrFile = static function (string $name, string $default = '') use ($readSecr
 $config['des_key'] = $readSecret('/run/app-secrets/roundcube-des-key');
 $config['plugins'] = array_values(array_unique(array_merge(
     (array) ($config['plugins'] ?? []),
-    ['archive', 'zipdownload', 'ident_switch', 'sizestation_oidc'],
+    ['archive', 'zipdownload', 'roundcube_oidc_suite'],
 )));
 $config['skin'] = 'elastic2022';
 $config['username_domain'] = 'sizestation.com';

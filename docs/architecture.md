@@ -11,8 +11,7 @@ Status: phase 1 design baseline, 2026-07-16.
 - Live Roundcube has no third-party `ident_switch` installation.
 
 Production remains on the official Roundcube image and pins the suite's exact
-Composer version. The optional custom image is retained only for offline
-fallback and CI verification.
+Composer version. The suite is one normal `roundcube-plugin` package.
 
 ## Repository topology
 
@@ -24,8 +23,9 @@ an unsquashed ancestor and the `upstream` remote is retained. The fork stays in
 `docs/ident-switch-upstream-diff.md` and tagged with the complete distribution.
 
 No Composer-installed dependency is edited in place. This repository is one
-versioned Composer library; a stock-container post-setup task installs its two
-bundled plugin trees atomically.
+versioned Roundcube plugin; the standard installer places it directly in
+`plugins/roundcube_oidc_suite`. Its one entrypoint composes the OIDC and account
+switching internals without exposing separate plugins to deployment.
 
 ## Runtime trust boundaries
 
@@ -133,9 +133,8 @@ binding and preferred changes. Application checks alone are not sufficient.
    `openbao` network or an explicitly trusted internal TLS endpoint.
 2. The Agent currently renders only `roundcube_des_key`. The design also needs a
    renewable token sink, OIDC client-secret file, and CA material.
-3. The shared tmpfs uses mode `1777`, which conflicts with the requirement that
-   runtime secrets not be world-readable. Deployment will use a restricted
-   directory/group and `0640` files after verifying container UID/GID behavior.
+3. The shared tmpfs follows the operator's established Agent pattern. Limit its
+   mounts to the Agent and Roundcube services and mount it read-only in Roundcube.
 4. Current SMTP is STARTTLS on port 587, while the target brief specifies
    implicit TLS on 465. The custom config will use and test
    `ssl://smtp.purelymail.com:465`.

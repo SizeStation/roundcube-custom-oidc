@@ -12,16 +12,8 @@ relevant overlays succeeded. Do not change it back to the internal HTTP URL.
 - `public` and `openbao` external Swarm overlay networks.
 - the existing `roundcube_db` volume and a single Roundcube replica while using
   SQLite;
-- exactly one Swarm node labeled `roundcube.secrets=true`; both Roundcube and
-  its Agent are constrained to this node because their protected tmpfs volume
-  uses the node-local Docker volume driver;
 - an Authentik provider configured as in `docs/authentik.md`;
 - the container system CA bundle, which validates the public OpenBao certificate.
-
-Set `ROUNDCUBE_PROXY_WHITELIST` to the narrow CIDR used by the Traefik-facing
-overlay (currently `10.0.1.0/24`). Roundcube trusts forwarded client addresses
-only when the immediate peer is in this list. Recheck it whenever the overlay
-network is recreated; never use `0.0.0.0/0`.
 
 Apply `deployment/openbao/runtime-policy.hcl` to a renewable Agent AppRole. Set
 its token use count to unlimited so Agent renewal works. Apply
@@ -58,14 +50,6 @@ Changing the existing DES key invalidates Roundcube-encrypted data.
 Create the external Swarm `roundcube_bao_role_id` and
 `roundcube_bao_secret_id` secrets from the AppRole credentials.
 
-Label the node that owns `roundcube_db` and will host the shared secret tmpfs.
-Do not put this label on more than one node:
-
-```sh
-docker node update --label-add roundcube.secrets=true ROUNDCUBE_NODE
-docker node inspect ROUNDCUBE_NODE --format '{{ index .Spec.Labels "roundcube.secrets" }}'
-```
-
 ## 2. Publish the single Composer package
 
 The repository root is the single package
@@ -82,16 +66,15 @@ composer validate --strict
 composer install --no-interaction
 composer test
 composer lint
-sh tests/install-suite.sh
 git tag -s v1.0.0 -m 'SizeStation Roundcube OIDC suite 1.0.0'
 git push origin v1.0.0
 ```
 
 Set `ROUNDCUBEMAIL_COMPOSER_PLUGINS` to that exact package version in the stack.
-The official Roundcube entrypoint installs it into `vendor`; the mounted
-post-setup task atomically copies both bundled plugins into Roundcube, installs
-the CLI, and runs both idempotent schema initializers. The task fails startup if
-the package or either plugin is incomplete.
+The official Roundcube entrypoint invokes Composer. Because the package is type
+`roundcube-plugin`, Roundcube's official plugin installer places it directly in
+`plugins/roundcube_oidc_suite`, creates its config stub, and initializes the
+combined schema. There is no copy script, post-setup task, or custom image.
 
 ## 3. Back up and migrate
 
@@ -106,7 +89,7 @@ to a timestamped backup on the server. Confirm the backup is non-empty before
 continuing. Do not migrate while the old container can write to SQLite.
 
 The stack uses `stop-first` with one SQLite replica, so the previous Roundcube
-task stops before the new task runs the post-setup migrations. The initializers
+task stops before Composer runs the plugin migrations. The initializers
 record schema versions in Roundcube's `system` table and apply only required
 changes. Test every package upgrade against a restored backup first.
 
@@ -119,9 +102,9 @@ docker stack config --compose-file deployment/stack.yml >/dev/null
 docker stack deploy --compose-file deployment/stack.yml roundcube
 ```
 
-The co-located Agent and Roundcube share a node-local RAM-backed volume owned by
-UID/GID 33. Token and rendered secret files are `0640`; the CA certificate is
-public configuration. The Agent reaches OpenBao on the `openbao` overlay while
+The Agent and Roundcube share the same node-local RAM-backed volume, following
+the existing OpenBao Agent deployment pattern. Only these services mount it;
+rendered runtime files are read-only in Roundcube. The Agent reaches OpenBao on the `openbao` overlay while
 Roundcube uses the configured TLS endpoint. Its runtime policy can read
 configuration and mailbox credentials but cannot write or list them.
 
