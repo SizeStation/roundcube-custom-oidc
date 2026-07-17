@@ -1,34 +1,21 @@
 # Provisioning and operations
 
-Run administration in a one-shot container using the same Roundcube database,
-runtime CA/token for reads, and a separate short-lived provisioning token at
-`/run/admin-secrets/openbao-provisioning-token`. Never add that token to the web
-service or shell history. All examples pipe passwords on standard input; prefer
-an interactive hidden prompt or secret manager rather than `printf` in real use.
-
-Set `IMAGE` to the deployed immutable digest. Use `--dry-run --format json` first for
-every mutation.
-
-On the single Swarm manager, invoke the CLI in a one-shot container. First
-write a short-lived provisioning token to a root-owned `0600` file outside the
-repository. The general command is:
+Run administration on the single Swarm manager with the bundled host launcher.
+It hides the one-shot Docker container, volume, network, and secret mounts:
 
 ```sh
-docker run --rm -i --network public \
-  --mount source=roundcube_db,target=/var/roundcube/db \
-  --mount source=roundcube_bao_files,target=/run/secrets,readonly \
-  --mount type=bind,src=/root/.secrets/openbao-provisioning-token,dst=/run/admin-secrets/openbao-provisioning-token,readonly \
-  -e ROUNDCUBEMAIL_DB_TYPE=sqlite \
-  -e ROUNDCUBEMAIL_COMPOSER_PLUGINS=sizestation/roundcube-oidc-suite:1.0.0-rc.9 \
-  -e ROUNDCUBEMAIL_PLUGINS=roundcube_oidc_suite \
-  --entrypoint /docker-entrypoint.sh "$IMAGE" \
-  bin/../plugins/roundcube_oidc_suite/bin/sizestation-oidc COMMAND_AND_OPTIONS
+chmod +x bin/roundcube-oidc-admin
+bin/roundcube-oidc-admin help
 ```
 
-Remove the token file immediately after the administration window. The
-long-running web service never receives it. In the examples below,
-`/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc ...` denotes the `COMMAND_AND_OPTIONS` tail
-inside that one-shot container.
+First place a short-lived token carrying the `roundcube-provider` policy at
+`/root/.secrets/openbao-provisioning-token` with mode `0600`. The launcher only
+mounts it into one-shot administrative containers; the long-running web service
+never receives it. Remove the token file after the administration window.
+
+Use `--dry-run` before mutations. Set `ROUNDCUBE_OIDC_ADMIN_FORMAT=json` when
+machine-readable output is useful. The full underlying CLI remains available
+through `bin/roundcube-oidc-admin raw CLI_ARGUMENTS...`.
 
 ## Provision before first login
 
@@ -37,32 +24,19 @@ this is the Authentik user UUID. Provision exactly one anchor; the anchor is
 permanent after first successful login.
 
 ```sh
-read -s MAIL_PASSWORD
-printf '%s' "$MAIL_PASSWORD" | /var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc provision \
-  --issuer https://auth.sizestation.cloud/application/o/roundcube/ \
-  --external-user-id AUTHENTIK_SUB \
-  --mailbox user@sizestation.com \
-  --credential-reference AUTHENTIK_SUB/anchor \
-  --password-stdin --anchor --preferred --json
-unset MAIL_PASSWORD
+bin/roundcube-oidc-admin --dry-run provision AUTHENTIK_SUB user@sizestation.com
+bin/roundcube-oidc-admin provision AUTHENTIK_SUB user@sizestation.com
 ```
 
-Add a secondary mailbox with a unique reference and omit `--anchor`. Add
-`--preferred` if it should open automatically after anchor login. The command
-validates IMAP and SMTP by default, writes OpenBao, creates the assignment, and
-never prints the password.
+The launcher requests the Purelymail password through a hidden prompt and
+generates an opaque credential reference automatically.
 
-To reference a credential already created through the separate provisioning
-identity, omit `--password-stdin`. The CLI reads and validates the existing
-secret but never rewrites or deletes it:
+Add a secondary mailbox for the same Authentik subject. The launcher validates
+IMAP and SMTP by default, writes OpenBao, creates the assignment, and never
+prints the password:
 
 ```sh
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc assignment:create \
-  --issuer https://auth.sizestation.cloud/application/o/roundcube/ \
-  --external-user-id AUTHENTIK_SUB \
-  --mailbox admin@sizestation.com \
-  --credential-reference OPAQUE_RANDOM_REFERENCE \
-  --format json
+bin/roundcube-oidc-admin add-email AUTHENTIK_SUB admin@sizestation.com
 ```
 
 For an initialized principal, newly created assignments bind and reconcile
@@ -71,12 +45,8 @@ immediately; another OIDC login is not required.
 ## Rotate and validate
 
 ```sh
-read -s MAIL_PASSWORD
-printf '%s' "$MAIL_PASSWORD" | /var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc rotate \
-  --assignment-id ASSIGNMENT_UUID --password-stdin --json
-unset MAIL_PASSWORD
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc validate \
-  --assignment-id ASSIGNMENT_UUID --json
+bin/roundcube-oidc-admin rotate ASSIGNMENT_UUID
+bin/roundcube-oidc-admin validate ASSIGNMENT_UUID
 ```
 
 Rotation writes a new KV v2 version. Existing requests may hold credentials
@@ -85,24 +55,27 @@ only for their current PHP request; the next request resolves the new version.
 ## Preferred, disable, remove, and principal controls
 
 ```sh
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc set-preferred --assignment-id UUID --json
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc disable --assignment-id UUID --json
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc remove --assignment-id UUID --json
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc disable-principal --principal-id ID --json
+bin/roundcube-oidc-admin users
+bin/roundcube-oidc-admin emails PRINCIPAL_ID
+bin/roundcube-oidc-admin prefer ASSIGNMENT_UUID
+bin/roundcube-oidc-admin disable-email ASSIGNMENT_UUID
+bin/roundcube-oidc-admin remove-email ASSIGNMENT_UUID
+bin/roundcube-oidc-admin purge-email ASSIGNMENT_UUID
+bin/roundcube-oidc-admin disable-user PRINCIPAL_ID
 ```
 
-Do not disable/remove the only enabled anchor. `remove` retires the database
-assignment for auditability; add `--delete-secret` only when intentional and
-after confirming no rollback needs the secret. Disabling a principal blocks new
-OIDC login but does not replace a full incident-response session revocation
-procedure.
+Do not disable/remove the only enabled anchor. `remove-email` retires the
+database assignment for auditability but retains its OpenBao credential.
+`purge-email` also deletes that credential and requires confirmation. Disabling
+a principal blocks new OIDC login but does not replace a full incident-response
+session revocation procedure.
 
 ## Reconcile and audit
 
 ```sh
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc reconcile:user --principal-id ID --format json
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc reconcile:all --format json
-/var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc audit:list --principal-id ID --limit 100 --format json
+bin/roundcube-oidc-admin reconcile-user PRINCIPAL_ID
+bin/roundcube-oidc-admin reconcile-all
+bin/roundcube-oidc-admin audit PRINCIPAL_ID
 ```
 
 Reconciliation is idempotent. It repairs missing managed identities and switch

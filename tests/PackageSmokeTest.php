@@ -43,9 +43,22 @@ final class PackageSmokeTest extends TestCase
         self::assertFileIsReadable(dirname(__DIR__) . '/bin/uninstall-roundcube-oidc.php');
         self::assertFileIsReadable(dirname(__DIR__) . '/bin/update-roundcube-oidc-db');
         self::assertFileIsReadable(dirname(__DIR__) . '/bin/update-roundcube-oidc-db.php');
+        self::assertFileIsReadable(dirname(__DIR__) . '/bin/roundcube-oidc-admin');
         self::assertFileDoesNotExist(dirname(__DIR__) . '/bin/start-roundcube-oidc');
         self::assertFileDoesNotExist(dirname(__DIR__) . '/deployment/install-suite.sh');
         self::assertFileDoesNotExist(dirname(__DIR__) . '/deployment/roundcube-config.inc.php');
+    }
+
+    public function testPackageShipsFriendlyHostAdministrationLauncher(): void
+    {
+        $launcher = (string) file_get_contents(dirname(__DIR__) . '/bin/roundcube-oidc-admin');
+
+        self::assertStringContainsString('provision SUB MAILBOX', $launcher);
+        self::assertStringContainsString('add-email SUB MAILBOX', $launcher);
+        self::assertStringContainsString('users)', $launcher);
+        self::assertStringContainsString('emails)', $launcher);
+        self::assertStringContainsString('Purelymail password:', $launcher);
+        self::assertStringNotContainsString('client_secret=', $launcher);
     }
 
     public function testGeneratedLocalConfigIsAcceptedByRoundcube(): void

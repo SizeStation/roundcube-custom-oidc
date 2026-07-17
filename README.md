@@ -41,6 +41,12 @@ finishes before Apache starts. The plugin reads its custom environment
 variables internally. No mounted PHP config, custom image, custom service
 command, or manual migration step is required.
 
+Mailbox administration on a Docker host is exposed through the bundled
+`bin/roundcube-oidc-admin` launcher. It provides short commands for provisioning
+users, adding mailboxes, rotating credentials, and enabling, disabling, or
+removing assignments while keeping the OpenBao write token out of the web
+container.
+
 ## Licence and source availability
 
 The SizeStation distribution is licensed under AGPL-3.0-or-later. The retained
