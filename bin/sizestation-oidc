@@ -43,9 +43,32 @@ try {
         (int) $rcmail->config->get('sizestation_oidc.openbao_connect_timeout_seconds', 2),
         (int) $rcmail->config->get('sizestation_oidc.openbao_request_timeout_seconds', 5),
     );
+    $provisioningRoleId = trim((string) $rcmail->config->get(
+        'sizestation_oidc.openbao_provisioning_role_id',
+        '',
+    ));
+    $provisioningSecretId = trim((string) $rcmail->config->get(
+        'sizestation_oidc.openbao_provisioning_secret_id',
+        '',
+    ));
+    if (($provisioningRoleId === '') !== ($provisioningSecretId === '')) {
+        throw new RuntimeException('OpenBao provisioning AppRole credentials are incomplete');
+    }
+    $appRole = $provisioningRoleId !== ''
+        ? new \SizeStation\Roundcube\Oidc\Provisioning\OpenBaoAppRoleConfig(
+            $provisioningRoleId,
+            $provisioningSecretId,
+            (string) $rcmail->config->get(
+                'sizestation_oidc.openbao_provisioning_approle_mount',
+                'approle',
+            ),
+        )
+        : null;
     $provisioningConfig = new \SizeStation\Roundcube\Credentials\OpenBao\OpenBaoClientConfig(
         (string) $rcmail->config->get('sizestation_oidc.openbao_provisioning_address', $runtimeConfig->address),
-        $required('sizestation_oidc.openbao_provisioning_token_file'),
+        $appRole === null
+            ? $required('sizestation_oidc.openbao_provisioning_token_file')
+            : $runtimeConfig->tokenFile,
         (string) $rcmail->config->get('sizestation_oidc.openbao_provisioning_kv_mount', $runtimeConfig->kvMount),
         (string) $rcmail->config->get('sizestation_oidc.openbao_provisioning_base_path', $runtimeConfig->basePath),
         (string) $rcmail->config->get('sizestation_oidc.openbao_provisioning_ca_file', $runtimeConfig->caFile),
@@ -75,7 +98,10 @@ try {
     }
     $application = new \SizeStation\Roundcube\Oidc\Cli\Application(
         $rcmail->db,
-        new \SizeStation\Roundcube\Oidc\Provisioning\OpenBaoKvV2Provisioner($provisioningConfig),
+        new \SizeStation\Roundcube\Oidc\Provisioning\OpenBaoKvV2Provisioner(
+            $provisioningConfig,
+            appRole: $appRole,
+        ),
         static fn (array $assignment): \SizeStation\Roundcube\Credentials\AccountCredentials =>
             $resolver->resolve($assignment),
         $validator,

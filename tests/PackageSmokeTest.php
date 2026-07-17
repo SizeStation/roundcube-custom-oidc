@@ -58,6 +58,8 @@ final class PackageSmokeTest extends TestCase
         self::assertStringContainsString('users)', $launcher);
         self::assertStringContainsString('emails)', $launcher);
         self::assertStringContainsString('Purelymail password:', $launcher);
+        self::assertStringContainsString('ROUNDCUBE_OPENBAO_APPROLE_ID', $launcher);
+        self::assertStringContainsString('ROUNDCUBE_OPENBAO_APPROLE_SECRET', $launcher);
         self::assertStringNotContainsString('client_secret=', $launcher);
     }
 

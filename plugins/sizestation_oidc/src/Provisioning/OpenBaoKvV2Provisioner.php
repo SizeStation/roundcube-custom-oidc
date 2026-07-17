@@ -11,10 +11,18 @@ use SizeStation\Roundcube\Credentials\OpenBao\OpenBaoClientConfig;
 
 final class OpenBaoKvV2Provisioner implements SecretProvisionerInterface
 {
+    private ?string $appRoleToken = null;
+
     public function __construct(
         private readonly OpenBaoClientConfig $config,
         private readonly ProvisioningTransportInterface $transport = new CurlProvisioningTransport(),
+        private readonly ?OpenBaoAppRoleConfig $appRole = null,
     ) {
+    }
+
+    public function __destruct()
+    {
+        $this->erase($this->appRoleToken);
     }
 
     public function create(CredentialReference $reference, array $secret): void
@@ -61,11 +69,7 @@ final class OpenBaoKvV2Provisioner implements SecretProvisionerInterface
     /** @param list<int> $successStatuses */
     private function send(string $method, string $url, ?string $body, array $successStatuses): void
     {
-        $token = @file_get_contents($this->config->tokenFile);
-        if (!is_string($token) || trim($token) === '') {
-            throw new RuntimeException('OpenBao provisioning token is unavailable');
-        }
-        $token = trim($token);
+        $token = $this->provisioningToken();
         try {
             $response = $this->transport->request($method, $url, [
                 'Accept' => 'application/json',
@@ -79,6 +83,64 @@ final class OpenBaoKvV2Provisioner implements SecretProvisionerInterface
             $this->erase($token);
             $this->erase($body);
         }
+    }
+
+    private function provisioningToken(): string
+    {
+        if ($this->appRole === null) {
+            $token = @file_get_contents($this->config->tokenFile);
+            if (!is_string($token) || trim($token) === '') {
+                throw new RuntimeException('OpenBao provisioning token is unavailable');
+            }
+
+            return trim($token);
+        }
+        if ($this->appRoleToken !== null) {
+            return $this->appRoleToken;
+        }
+
+        try {
+            $body = json_encode([
+                'role_id' => $this->appRole->roleId,
+                'secret_id' => $this->appRole->secretId,
+            ], JSON_THROW_ON_ERROR);
+        } catch (JsonException $exception) {
+            throw new RuntimeException('Unable to encode the OpenBao AppRole login', 0, $exception);
+        }
+        try {
+            $response = $this->transport->request(
+                'POST',
+                $this->appRoleLoginUrl(),
+                [
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ],
+                $body,
+                $this->config,
+            );
+            if ($response->status !== 200) {
+                throw new RuntimeException('OpenBao AppRole login was rejected');
+            }
+            $payload = json_decode($response->body, true, flags: JSON_THROW_ON_ERROR);
+            $token = $payload['auth']['client_token'] ?? null;
+            if (!is_string($token) || trim($token) === '') {
+                throw new RuntimeException('OpenBao AppRole login returned no client token');
+            }
+            $this->appRoleToken = trim($token);
+
+            return $this->appRoleToken;
+        } catch (JsonException $exception) {
+            throw new RuntimeException('OpenBao AppRole login returned an invalid response', 0, $exception);
+        } finally {
+            $this->erase($body);
+        }
+    }
+
+    private function appRoleLoginUrl(): string
+    {
+        $mountPath = implode('/', array_map('rawurlencode', explode('/', $this->appRole?->mountPath ?? '')));
+
+        return $this->config->address . '/v1/auth/' . $mountPath . '/login';
     }
 
     private function dataUrl(CredentialReference $reference): string

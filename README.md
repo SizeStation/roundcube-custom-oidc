@@ -44,8 +44,9 @@ command, or manual migration step is required.
 Mailbox administration on a Docker host is exposed through the bundled
 `bin/roundcube-oidc-admin` launcher. It provides short commands for provisioning
 users, adding mailboxes, rotating credentials, and enabling, disabling, or
-removing assignments while keeping the OpenBao write token out of the web
-container.
+removing assignments. It accepts OpenBao AppRole credentials, authenticates
+inside its one-shot container, and keeps all provisioning credentials out of
+the web container.
 
 ## Licence and source availability
 

@@ -104,6 +104,16 @@ $config['sizestation_oidc.openbao_provisioning_token_file'] = $sizeStationEnvPat
     'ROUNDCUBE_OPENBAO_PROVISIONING_TOKEN_FILE',
     '/run/admin-secrets/openbao-provisioning-token',
 );
+$config['sizestation_oidc.openbao_provisioning_role_id'] = $sizeStationEnvOrFile(
+    'ROUNDCUBE_OPENBAO_PROVISIONING_ROLE_ID',
+);
+$config['sizestation_oidc.openbao_provisioning_secret_id'] = $sizeStationEnvOrFile(
+    'ROUNDCUBE_OPENBAO_PROVISIONING_SECRET_ID',
+);
+$config['sizestation_oidc.openbao_provisioning_approle_mount'] = $sizeStationEnvOrFile(
+    'ROUNDCUBE_OPENBAO_PROVISIONING_APPROLE_MOUNT',
+    'approle',
+);
 $config['sizestation_oidc.validate_imap_on_provision'] = true;
 $config['sizestation_oidc.validate_smtp_on_provision'] = true;
 $config['sizestation_oidc.validation_imap_endpoint'] = 'ssl://imap.purelymail.com:993';

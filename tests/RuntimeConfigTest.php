@@ -22,6 +22,11 @@ final class RuntimeConfigTest extends TestCase
         'ROUNDCUBE_OPENBAO_ADDRESS',
         'ROUNDCUBE_OPENBAO_ADDRESS_FILE',
         'ROUNDCUBE_OPENBAO_TOKEN_FILE',
+        'ROUNDCUBE_OPENBAO_PROVISIONING_ROLE_ID',
+        'ROUNDCUBE_OPENBAO_PROVISIONING_ROLE_ID_FILE',
+        'ROUNDCUBE_OPENBAO_PROVISIONING_SECRET_ID',
+        'ROUNDCUBE_OPENBAO_PROVISIONING_SECRET_ID_FILE',
+        'ROUNDCUBE_OPENBAO_PROVISIONING_APPROLE_MOUNT',
     ];
 
     protected function tearDown(): void
@@ -41,6 +46,8 @@ final class RuntimeConfigTest extends TestCase
         putenv('ROUNDCUBE_OIDC_CLIENT_ID=roundcube-client');
         putenv('ROUNDCUBE_OIDC_CLIENT_SECRET_FILE=/run/secrets/client-secret');
         putenv('ROUNDCUBE_OPENBAO_TOKEN_FILE=/run/secrets/openbao-token');
+        putenv('ROUNDCUBE_OPENBAO_PROVISIONING_ROLE_ID=role-id');
+        putenv('ROUNDCUBE_OPENBAO_PROVISIONING_SECRET_ID=secret-id');
 
         try {
             $config = $this->loadConfig();
@@ -58,6 +65,9 @@ final class RuntimeConfigTest extends TestCase
         self::assertSame(['openid', 'profile', 'email'], $config['sizestation_oidc.scopes']);
         self::assertSame('sub', $config['sizestation_oidc.external_user_id_claim']);
         self::assertSame('/run/secrets/openbao-token', $config['sizestation_oidc.openbao_token_file']);
+        self::assertSame('role-id', $config['sizestation_oidc.openbao_provisioning_role_id']);
+        self::assertSame('secret-id', $config['sizestation_oidc.openbao_provisioning_secret_id']);
+        self::assertSame('approle', $config['sizestation_oidc.openbao_provisioning_approle_mount']);
         self::assertSame(
             $config['sizestation_oidc.openbao_token_file'],
             $config['ident_switch.openbao_token_file'],

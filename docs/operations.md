@@ -8,10 +8,19 @@ chmod +x bin/roundcube-oidc-admin
 bin/roundcube-oidc-admin help
 ```
 
-First place a short-lived token carrying the `roundcube-provider` policy at
-`/root/.secrets/openbao-provisioning-token` with mode `0600`. The launcher only
-mounts it into one-shot administrative containers; the long-running web service
-never receives it. Remove the token file after the administration window.
+Export the OpenBao AppRole credentials associated with the
+`roundcube-provider` policy:
+
+```sh
+export ROUNDCUBE_OPENBAO_APPROLE_ID='ROLE_ID'
+export ROUNDCUBE_OPENBAO_APPROLE_SECRET='SECRET_ID'
+```
+
+The launcher performs AppRole login automatically inside each one-shot admin
+container. The issued token stays in process memory; no `bao login`, temporary
+token command, or host token file is needed. The long-running web service never
+receives these credentials. A pre-issued token file at
+`/root/.secrets/openbao-provisioning-token` remains supported for compatibility.
 
 Use `--dry-run` before mutations. Set `ROUNDCUBE_OIDC_ADMIN_FORMAT=json` when
 machine-readable output is useful. The full underlying CLI remains available

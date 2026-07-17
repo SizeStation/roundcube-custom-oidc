@@ -30,7 +30,7 @@ services:
       ROUNDCUBE_OIDC_CLIENT_SECRET_FILE: "/run/secrets/oidc-client-secret"
       ROUNDCUBE_OIDC_REDIRECT_URI: "https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback"
       ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://mail.sizestation.cloud/"
-      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.10,seb1k/elastic2022:^1.7"
+      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.11,seb1k/elastic2022:^1.7"
       ROUNDCUBEMAIL_PLUGINS: "archive,zipdownload,roundcube_oidc_suite"
       ROUNDCUBEMAIL_SKIN: elastic2022
       ROUNDCUBEMAIL_DB_TYPE: sqlite
