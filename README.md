@@ -33,7 +33,9 @@ Production uses the official Roundcube image with
 `ROUNDCUBEMAIL_COMPOSER_PLUGINS=sizestation/roundcube-oidc-suite:VERSION`.
 The package is a standard `roundcube-plugin`; Roundcube's Composer installer
 places it directly in `plugins/roundcube_oidc_suite`, creates its config stub,
-and applies its database schema. No custom image or deployment installer runs.
+and applies its database schema. The plugin reads its custom environment
+variables internally. No mounted PHP config, custom image, or deployment
+installer runs.
 
 ## Licence and source availability
 

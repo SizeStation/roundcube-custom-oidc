@@ -20,27 +20,29 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        for file in roundcube-des-key oidc-client-secret openbao-token; do
-          until [ -s "/run/app-secrets/$$file" ]; do sleep 2; done
+        for file in roundcube_des_key oidc-client-secret openbao-token; do
+          until [ -s "/run/secrets/$$file" ]; do sleep 2; done
         done
         exec /docker-entrypoint.sh apache2-foreground
     environment:
       ROUNDCUBE_OIDC_ISSUER: "https://auth.sizestation.cloud/application/o/roundcube/"
       ROUNDCUBE_OIDC_CLIENT_ID: "REPLACE_WITH_AUTHENTIK_CLIENT_ID"
-      ROUNDCUBE_OIDC_CLIENT_SECRET_FILE: "/run/app-secrets/oidc-client-secret"
+      ROUNDCUBE_OIDC_CLIENT_SECRET_FILE: "/run/secrets/oidc-client-secret"
       ROUNDCUBE_OIDC_REDIRECT_URI: "https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback"
       ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://mail.sizestation.cloud/"
-      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.5,seb1k/elastic2022:^1.7"
+      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.6,seb1k/elastic2022:^1.7"
       ROUNDCUBEMAIL_PLUGINS: "archive,zipdownload,roundcube_oidc_suite"
       ROUNDCUBEMAIL_SKIN: elastic2022
       ROUNDCUBEMAIL_DB_TYPE: sqlite
       ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE: 25M
-    configs:
-      - source: roundcube_oidc_config
-        target: /var/roundcube/config/sizestation_oidc.php
+      ROUNDCUBEMAIL_USERNAME_DOMAIN: "sizestation.com"
+      ROUNDCUBEMAIL_DEFAULT_HOST: "ssl://imap.purelymail.com"
+      ROUNDCUBEMAIL_DEFAULT_PORT: "993"
+      ROUNDCUBEMAIL_SMTP_SERVER: "tls://smtp.purelymail.com"
+      ROUNDCUBEMAIL_SMTP_PORT: "587"
     volumes:
       - roundcube_db:/var/roundcube/db
-      - roundcube-bao-files:/run/app-secrets:ro
+      - roundcube-bao-files:/run/secrets:ro
     networks: [public]
     deploy:
       replicas: 1
@@ -72,7 +74,6 @@ networks:
 
 configs:
   roundcube_bao_agent: {file: ./roundcube-agent.hcl}
-  roundcube_oidc_config: {file: ./roundcube-config.inc.php}
 
 secrets:
   roundcube_bao_role_id: {external: true}

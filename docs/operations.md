@@ -16,13 +16,13 @@ repository. The general command is:
 ```sh
 docker run --rm -i --network public \
   --mount source=roundcube_db,target=/var/roundcube/db \
-  --mount source=roundcube_bao_files,target=/run/app-secrets,readonly \
-  --mount type=bind,src="$PWD/deployment/roundcube-config.inc.php",dst=/var/roundcube/config/sizestation_oidc.php,readonly \
+  --mount source=roundcube_bao_files,target=/run/secrets,readonly \
   --mount type=bind,src=/root/.secrets/openbao-provisioning-token,dst=/run/admin-secrets/openbao-provisioning-token,readonly \
   -e ROUNDCUBEMAIL_DB_TYPE=sqlite \
-  -e ROUNDCUBE_OIDC_CLIENT_ID=AUTHENTIK_CLIENT_ID \
+  -e ROUNDCUBEMAIL_COMPOSER_PLUGINS=sizestation/roundcube-oidc-suite:1.0.0-rc.6 \
+  -e ROUNDCUBEMAIL_PLUGINS=roundcube_oidc_suite \
   --entrypoint /docker-entrypoint.sh "$IMAGE" \
-  bin/sizestation-oidc COMMAND_AND_OPTIONS
+  bin/../plugins/roundcube_oidc_suite/bin/sizestation-oidc COMMAND_AND_OPTIONS
 ```
 
 Remove the token file immediately after the administration window. The

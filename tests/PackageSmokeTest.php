@@ -25,6 +25,8 @@ final class PackageSmokeTest extends TestCase
         self::assertSame('roundcube-plugin', $package['type']);
         self::assertSame('SQL', $package['extra']['roundcube']['sql-dir']);
         self::assertFileExists(dirname(__DIR__) . '/roundcube_oidc_suite.php');
+        self::assertFileExists(dirname(__DIR__) . '/config.runtime.php');
         self::assertFileDoesNotExist(dirname(__DIR__) . '/deployment/install-suite.sh');
+        self::assertFileDoesNotExist(dirname(__DIR__) . '/deployment/roundcube-config.inc.php');
     }
 }

@@ -29,7 +29,7 @@ template_config {
 }
 
 template {
-  destination          = "/run/app-secrets/roundcube-des-key"
+  destination          = "/run/app-secrets/roundcube_des_key"
   perms                = "0644"
   backup               = false
   error_on_missing_key = true

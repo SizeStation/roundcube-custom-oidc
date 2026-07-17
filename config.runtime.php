@@ -1,84 +1,94 @@
 <?php
 
-// Mounted as /var/roundcube/config/sizestation_oidc.php. It contains no secret.
-$readSecret = static function (string $path): string {
+/**
+ * Versioned runtime configuration for the SizeStation Roundcube plugin.
+ *
+ * Non-secret values may be supplied directly or through a Docker-style
+ * NAME_FILE variable. Secrets remain file references and are never copied into
+ * the process environment.
+ */
+$sizeStationReadConfigFile = static function (string $path): string {
     $value = @file_get_contents($path);
     if ($value === false || trim($value) === '') {
-        throw new RuntimeException("Required runtime secret is unavailable: {$path}");
+        throw new RuntimeException("Required runtime configuration file is unavailable: {$path}");
     }
 
     return trim($value);
 };
-$envOrFile = static function (string $name, string $default = '') use ($readSecret): string {
+$sizeStationEnvOrFile = static function (string $name, string $default = '') use ($sizeStationReadConfigFile): string {
     $value = trim((string) getenv($name));
     $file = trim((string) getenv($name . '_FILE'));
     if ($value !== '' && $file !== '') {
         throw new RuntimeException("Set either {$name} or {$name}_FILE, not both");
     }
     if ($file !== '') {
-        return $readSecret($file);
+        return $sizeStationReadConfigFile($file);
     }
 
     return $value !== '' ? $value : $default;
 };
+$sizeStationEnvPath = static function (string $name, string $default): string {
+    $value = trim((string) getenv($name));
 
-$config['des_key'] = $readSecret('/run/app-secrets/roundcube-des-key');
-$config['plugins'] = array_values(array_unique(array_merge(
-    (array) ($config['plugins'] ?? []),
-    ['archive', 'zipdownload', 'roundcube_oidc_suite'],
-)));
-$config['skin'] = 'elastic2022';
-$config['username_domain'] = 'sizestation.com';
-$config['imap_host'] = 'ssl://imap.purelymail.com:993';
-$config['smtp_host'] = 'ssl://smtp.purelymail.com:465';
-$config['smtp_user'] = '%u';
-$config['smtp_pass'] = '%p';
-$config['use_https'] = true;
-$config['session_samesite'] = 'Lax';
-$config['session_path'] = '/';
-$proxyWhitelist = trim((string) getenv('ROUNDCUBE_PROXY_WHITELIST'));
-$config['proxy_whitelist'] = $proxyWhitelist === ''
-    ? []
-    : array_values(array_filter(array_map('trim', explode(',', $proxyWhitelist))));
+    return $value !== '' ? $value : $default;
+};
 
 $config['sizestation_oidc.enabled'] = true;
-$config['sizestation_oidc.issuer'] = $envOrFile(
+$config['sizestation_oidc.issuer'] = $sizeStationEnvOrFile(
     'ROUNDCUBE_OIDC_ISSUER',
     'https://auth.sizestation.cloud/application/o/roundcube/',
 );
-$config['sizestation_oidc.client_id'] = $envOrFile('ROUNDCUBE_OIDC_CLIENT_ID');
-$config['sizestation_oidc.client_secret_file'] =
-    $envOrFile('ROUNDCUBE_OIDC_CLIENT_SECRET_FILE', '/run/app-secrets/oidc-client-secret');
-$config['sizestation_oidc.redirect_uri'] = $envOrFile(
+$config['sizestation_oidc.client_id'] = $sizeStationEnvOrFile('ROUNDCUBE_OIDC_CLIENT_ID');
+$config['sizestation_oidc.client_secret_file'] = $sizeStationEnvPath(
+    'ROUNDCUBE_OIDC_CLIENT_SECRET_FILE',
+    '/run/secrets/oidc-client-secret',
+);
+$config['sizestation_oidc.redirect_uri'] = $sizeStationEnvOrFile(
     'ROUNDCUBE_OIDC_REDIRECT_URI',
     'https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback',
 );
-$config['sizestation_oidc.post_logout_redirect_uri'] = $envOrFile(
+$config['sizestation_oidc.post_logout_redirect_uri'] = $sizeStationEnvOrFile(
     'ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI',
     'https://mail.sizestation.cloud/',
 );
 $config['sizestation_oidc.scopes'] = ['openid', 'profile', 'email', 'sizestation_user_id'];
 $config['sizestation_oidc.external_user_id_claim'] = 'sizestation_user_id';
 $config['sizestation_oidc.allowed_algorithms'] = ['RS256'];
-$config['sizestation_oidc.allowed_groups'] = []; // e.g. ['roundcube-users']
+$config['sizestation_oidc.allowed_groups'] = [];
 $config['sizestation_oidc.groups_claim'] = 'groups';
 $config['sizestation_oidc.hide_password_form'] = true;
-$config['sizestation_oidc.source_url'] =
-    'https://github.com/SizeStation/roundcube-custom-oidc';
+$config['sizestation_oidc.source_url'] = 'https://github.com/SizeStation/roundcube-custom-oidc';
 $config['sizestation_oidc.clock_tolerance_seconds'] = 60;
 $config['sizestation_oidc.connect_timeout_seconds'] = 2;
 $config['sizestation_oidc.request_timeout_seconds'] = 5;
-$config['sizestation_oidc.imap_host'] = 'ssl://imap.purelymail.com:993';
+$config['sizestation_oidc.imap_host'] = $sizeStationEnvOrFile(
+    'ROUNDCUBE_OIDC_IMAP_HOST',
+    'ssl://imap.purelymail.com:993',
+);
 
-$config['sizestation_oidc.openbao_address'] = 'https://bao.sizestation.cloud';
-$config['sizestation_oidc.openbao_token_file'] = '/run/app-secrets/openbao-token';
-$config['sizestation_oidc.openbao_kv_mount'] = 'kv';
-$config['sizestation_oidc.openbao_base_path'] = 'roundcube/mailboxes';
-$config['sizestation_oidc.openbao_ca_file'] = '/etc/ssl/certs/ca-certificates.crt';
+$config['sizestation_oidc.openbao_address'] = $sizeStationEnvOrFile(
+    'ROUNDCUBE_OPENBAO_ADDRESS',
+    'https://bao.sizestation.cloud',
+);
+$config['sizestation_oidc.openbao_token_file'] = $sizeStationEnvPath(
+    'ROUNDCUBE_OPENBAO_TOKEN_FILE',
+    '/run/secrets/openbao-token',
+);
+$config['sizestation_oidc.openbao_kv_mount'] = $sizeStationEnvOrFile('ROUNDCUBE_OPENBAO_KV_MOUNT', 'kv');
+$config['sizestation_oidc.openbao_base_path'] = $sizeStationEnvOrFile(
+    'ROUNDCUBE_OPENBAO_BASE_PATH',
+    'roundcube/mailboxes',
+);
+$config['sizestation_oidc.openbao_ca_file'] = $sizeStationEnvPath(
+    'ROUNDCUBE_OPENBAO_CA_FILE',
+    '/etc/ssl/certs/ca-certificates.crt',
+);
 $config['sizestation_oidc.openbao_connect_timeout_seconds'] = 2;
 $config['sizestation_oidc.openbao_request_timeout_seconds'] = 5;
-$config['sizestation_oidc.openbao_provisioning_token_file'] =
-    '/run/admin-secrets/openbao-provisioning-token';
+$config['sizestation_oidc.openbao_provisioning_token_file'] = $sizeStationEnvPath(
+    'ROUNDCUBE_OPENBAO_PROVISIONING_TOKEN_FILE',
+    '/run/admin-secrets/openbao-provisioning-token',
+);
 $config['sizestation_oidc.validate_imap_on_provision'] = true;
 $config['sizestation_oidc.validate_smtp_on_provision'] = true;
 $config['sizestation_oidc.validation_imap_endpoint'] = 'ssl://imap.purelymail.com:993';

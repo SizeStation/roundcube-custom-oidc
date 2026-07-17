@@ -5,8 +5,8 @@ remained untouched.
 
 ## Automated and build evidence
 
-- PHPUnit: **112 tests, 325 assertions**, all passing from a clean locked install.
-- PHPCS: **84 files**, all passing.
+- PHPUnit: **114 tests, 336 assertions**, all passing from a clean locked install.
+- PHPCS: **85 files**, all passing.
 - Fresh SQLite plugin migration: Roundcube's official Composer installer
   reported `[OK]` and created both internal schemas from the combined SQL set.
 - Fresh PostgreSQL 16 and MariaDB 11 schemas: both plugin schemas applied to
@@ -15,10 +15,10 @@ remained untouched.
 - The single `sizestation/roundcube-oidc-suite` package passed strict Composer
   validation and a clean locked install. Roundcube installed it directly at
   `plugins/roundcube_oidc_suite`; its one entrypoint loaded OIDC, shared
-  credentials, and account switching successfully. No copy script or custom
-  image participated.
+  credentials, account switching, and the packaged environment/`_FILE`
+  configuration successfully. No copy script or custom image participated.
 - `docker stack config` rendered the supplied Swarm file successfully with the
-  intended runtime secret paths and config sources.
+  intended native Roundcube secret path and no mounted PHP configuration.
 - OpenBao Agent uses the operator's existing shared-tmpfs pattern and renders
   files readable by the Roundcube container; AppRole still controls OpenBao access.
 - TLS `bao status` succeeded from both `public` and `openbao` overlays against

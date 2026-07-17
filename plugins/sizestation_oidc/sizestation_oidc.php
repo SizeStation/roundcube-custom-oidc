@@ -19,6 +19,7 @@ class roundcube_oidc_suite extends ident_switch
     public function init(): void
     {
         $this->loadSizeStationAutoloader();
+        $this->load_config('config.runtime.php');
         $this->load_config();
         if (!$this->enabled()) {
             return;

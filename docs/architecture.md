@@ -127,16 +127,16 @@ checks with row/database locking appropriate to each engine, plus unique guard
 columns/indexes where supported. Concurrency tests are mandatory for first
 binding and preferred changes. Application checks alone are not sufficient.
 
-## Live deployment gaps
+## Deployment decisions
 
-1. Roundcube is attached only to `public`; direct OpenBao KV reads require the
-   `openbao` network or an explicitly trusted internal TLS endpoint.
-2. The Agent currently renders only `roundcube_des_key`. The design also needs a
-   renewable token sink, OIDC client-secret file, and CA material.
+1. Roundcube is attached only to `public` and uses the trusted public TLS
+   OpenBao endpoint; the Agent retains the internal `openbao` network.
+2. The Agent renders `roundcube_des_key`, the OIDC client-secret file, and a
+   renewable runtime token sink into the shared tmpfs.
 3. The shared tmpfs follows the operator's established Agent pattern. Limit its
    mounts to the Agent and Roundcube services and mount it read-only in Roundcube.
 4. Current SMTP is STARTTLS on port 587, while the target brief specifies
-   implicit TLS on 465. The custom config will use and test
+   implicit TLS on 465. The packaged runtime config uses and tests
    `ssl://smtp.purelymail.com:465`.
 5. SQLite is suitable for the current single replica, but migrations and tests
    still cover all three claimed database families.

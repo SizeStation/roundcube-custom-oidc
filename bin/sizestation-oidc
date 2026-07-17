@@ -17,6 +17,12 @@ if (in_array($_SERVER['argv'][1] ?? 'help', ['help', '--help', '-h'], true)) {
 }
 
 $rcmail = rcmail::get_instance();
+$rcmail->config->load_from_file(dirname(__DIR__) . '/config.runtime.php');
+$localPluginConfig = dirname(__DIR__) . '/config.inc.php';
+if (is_file($localPluginConfig)) {
+    $rcmail->config->load_from_file($localPluginConfig);
+}
+
 $required = static function (string $key) use ($rcmail): string {
     $value = $rcmail->config->get($key);
     if (!is_string($value) || trim($value) === '') {

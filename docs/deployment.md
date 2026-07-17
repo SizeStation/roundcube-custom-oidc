@@ -29,8 +29,9 @@ bao kv put -mount=kv roundcube/oidc \
   client_secret='REPLACE_WITH_AUTHENTIK_SECRET'
 ```
 
-Roundcube's Authentik-side values are runtime configuration. The supplied PHP
-config accepts each non-secret value directly or from a Docker-style file:
+Roundcube's Authentik-side values are runtime configuration. The plugin's
+versioned internal config accepts each non-secret value directly or from a
+Docker-style file:
 
 - `ROUNDCUBE_OIDC_ISSUER` or `ROUNDCUBE_OIDC_ISSUER_FILE`
 - `ROUNDCUBE_OIDC_CLIENT_ID` or `ROUNDCUBE_OIDC_CLIENT_ID_FILE`
@@ -74,7 +75,9 @@ Set `ROUNDCUBEMAIL_COMPOSER_PLUGINS` to that exact package version in the stack.
 The official Roundcube entrypoint invokes Composer. Because the package is type
 `roundcube-plugin`, Roundcube's official plugin installer places it directly in
 `plugins/roundcube_oidc_suite`, creates its config stub, and initializes the
-combined schema. There is no copy script, post-setup task, or custom image.
+combined schema. The plugin reads its custom environment variables itself.
+There is no mounted Roundcube PHP config, copy script, post-setup task, or
+custom image.
 
 ## 3. Back up and migrate
 
@@ -104,7 +107,9 @@ docker stack deploy --compose-file deployment/stack.yml roundcube
 
 The Agent and Roundcube share the same node-local RAM-backed volume, following
 the existing OpenBao Agent deployment pattern. Only these services mount it;
-rendered runtime files are read-only in Roundcube. The Agent reaches OpenBao on the `openbao` overlay while
+rendered runtime files appear under `/run/secrets` read-only in Roundcube. The
+official entrypoint consumes `roundcube_des_key`; the plugin consumes the OIDC
+secret and renewable Agent token. The Agent reaches OpenBao on the `openbao` overlay while
 Roundcube uses the configured TLS endpoint. Its runtime policy can read
 configuration and mailbox credentials but cannot write or list them.
 
