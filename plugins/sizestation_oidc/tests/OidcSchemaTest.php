@@ -55,12 +55,11 @@ final class OidcSchemaTest extends TestCase
         );
     }
 
-    public function testDatabaseRejectsCredentialReferenceReuse(): void
+    public function testDatabaseAllowsCredentialReferenceReuseAcrossAssignments(): void
     {
         $database = $this->database();
         $this->insertAssignment($database, '00000000-0000-4000-8000-000000000001', 'one@example.test');
 
-        $this->expectException(\PDOException::class);
         $statement = $database->prepare(
             'INSERT INTO sizestation_mailbox_assignments ('
             . 'id, issuer, external_user_id, mailbox_address, credential_provider, credential_reference,'
@@ -71,7 +70,7 @@ final class OidcSchemaTest extends TestCase
             '00000000-0000-4000-8000-000000000002',
             'https://issuer.example',
             'external-2',
-            'two@example.test',
+            'one@example.test',
             'openbao',
             'assignment/00000000-0000-4000-8000-000000000001',
             'anchor',
@@ -79,14 +78,17 @@ final class OidcSchemaTest extends TestCase
             'now',
             'now',
         ]);
+        self::assertSame(2, (int) $database->query(
+            'SELECT COUNT(*) FROM sizestation_mailbox_assignments',
+        )->fetchColumn());
     }
 
     public function testFreshSchemaRecordsLatestVersion(): void
     {
-        self::assertSame('2026071602', $this->database()->query(
+        self::assertSame('2026071701', $this->database()->query(
             "SELECT value FROM system WHERE name = 'sizestation_oidc-version'",
         )->fetchColumn());
-        self::assertSame('2026071700', $this->database()->query(
+        self::assertSame('2026071701', $this->database()->query(
             "SELECT value FROM system WHERE name = 'roundcube_oidc_suite-version'",
         )->fetchColumn());
     }

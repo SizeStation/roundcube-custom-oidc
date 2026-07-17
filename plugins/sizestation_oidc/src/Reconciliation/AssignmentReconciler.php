@@ -11,6 +11,14 @@ final class AssignmentReconciler
 {
     private const ENABLED = 1;
     private const AUTH_IMAP = 1;
+    /** @var array<string, string> */
+    private const DEFAULT_FOLDERS = [
+        'drafts' => 'Drafts',
+        'sent' => 'Sent',
+        'junk' => 'Junk',
+        'trash' => 'Trash',
+        'archive' => 'Archive',
+    ];
 
     public function __construct(
         private readonly \rcube_db $database,
@@ -41,10 +49,6 @@ final class AssignmentReconciler
                 }
                 $assignmentId = (string) $assignment['id'];
                 $known[$assignmentId] = true;
-                if (!empty($assignment['is_anchor'])) {
-                    $this->updateAssignment($assignmentId, $principalId, 'anchor', null, null);
-                    continue;
-                }
                 if (empty($assignment['enabled'])) {
                     if ($this->disableManagedRecord($assignmentId, $roundcubeUserId)) {
                         ++$disabled;
@@ -54,24 +58,46 @@ final class AssignmentReconciler
                 }
 
                 $record = $this->managedRecord($assignmentId, $roundcubeUserId);
+                $anchor = !empty($assignment['is_anchor']);
                 if ($record === null) {
                     $this->assertNotOwnedByAnotherUser($assignmentId, $roundcubeUserId);
-                    $identityId = $this->createIdentity($roundcubeUserId, $assignment);
-                    $recordId = $this->createManagedRecord($roundcubeUserId, $identityId, $assignment);
+                    $identityId = $anchor
+                        ? $this->anchorIdentity($roundcubeUserId, $assignment)
+                        : $this->createIdentity($roundcubeUserId, $assignment);
+                    $recordId = $this->createManagedRecord(
+                        $roundcubeUserId,
+                        $identityId,
+                        $assignment,
+                        !$anchor,
+                    );
                     ++$created;
                 } else {
                     $recordId = (int) $record['id'];
-                    $identityId = $this->repairIdentity($record, $roundcubeUserId, $assignment);
-                    $this->updateManagedRecord($recordId, $roundcubeUserId, $identityId, $assignment);
+                    $identityId = $anchor
+                        ? $this->anchorIdentity($roundcubeUserId, $assignment, (int) $record['iid'])
+                        : $this->repairIdentity($record, $roundcubeUserId, $assignment);
+                    $this->updateManagedRecord(
+                        $recordId,
+                        $roundcubeUserId,
+                        $identityId,
+                        $assignment,
+                        !$anchor,
+                    );
                     ++$updated;
                 }
-                $this->updateAssignment($assignmentId, $principalId, 'materialized', $recordId, $identityId);
+                $this->updateAssignment(
+                    $assignmentId,
+                    $principalId,
+                    $anchor ? 'anchor' : 'materialized',
+                    $recordId,
+                    $identityId,
+                );
                 $materialized[] = [
                     'assignment_id' => $assignmentId,
                     'record_id' => $recordId,
                     'identity_id' => $identityId,
                 ];
-                if (!empty($assignment['is_preferred'])) {
+                if (!empty($assignment['is_preferred']) && !$anchor) {
                     $preferredRecordId = $recordId;
                 }
             }
@@ -161,6 +187,47 @@ final class AssignmentReconciler
         return $identityId;
     }
 
+    /** @param array<string, mixed> $assignment */
+    private function anchorIdentity(int $userId, array $assignment, ?int $managedIdentityId = null): int
+    {
+        $identityId = $managedIdentityId;
+        if ($identityId === null) {
+            $query = $this->database->query(
+                'SELECT identity_id FROM ' . $this->database->table_name('identities')
+                . ' WHERE user_id = ? AND del = 0'
+                . ' ORDER BY CASE WHEN email = ? THEN 0 WHEN standard = 1 THEN 1 ELSE 2 END, identity_id',
+                $userId,
+                (string) $assignment['mailbox_address'],
+            );
+            $row = $this->database->fetch_assoc($query);
+            $identityId = is_array($row) ? (int) $row['identity_id'] : null;
+        }
+        if ($identityId === null || $identityId < 1) {
+            $identityId = $this->createIdentity($userId, $assignment);
+        }
+
+        $demoted = $this->database->query(
+            'UPDATE ' . $this->database->table_name('identities')
+            . ' SET standard = 0 WHERE user_id = ? AND identity_id <> ? AND standard = 1',
+            $userId,
+            $identityId,
+        );
+        $updated = $this->database->query(
+            'UPDATE ' . $this->database->table_name('identities')
+            . ' SET changed = ' . $this->database->now() . ', standard = 1, name = ?, email = ?'
+            . ' WHERE identity_id = ? AND user_id = ? AND del = 0',
+            $this->identityName($assignment),
+            (string) $assignment['mailbox_address'],
+            $identityId,
+            $userId,
+        );
+        if (!$demoted || !$updated) {
+            throw new RuntimeException('Unable to normalize the managed anchor identity');
+        }
+
+        return $identityId;
+    }
+
     /** @param array<string, mixed> $record
      *  @param array<string, mixed> $assignment
      */
@@ -193,18 +260,23 @@ final class AssignmentReconciler
     }
 
     /** @param array<string, mixed> $assignment */
-    private function createManagedRecord(int $userId, int $identityId, array $assignment): int
-    {
+    private function createManagedRecord(
+        int $userId,
+        int $identityId,
+        array $assignment,
+        bool $switchable,
+    ): int {
         $label = $this->uniqueLabel($userId, $this->label($assignment), (string) $assignment['id']);
         $query = $this->database->query(
             'INSERT INTO ' . $this->database->table_name('ident_switch')
             . ' (user_id, iid, label, flags, smtp_auth, sieve_auth, credential_provider,'
-            . ' credential_reference, managed_externally, managed_assignment_id, notify_check)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            . ' credential_reference, managed_externally, managed_assignment_id, notify_check,'
+            . ' drafts_mbox, sent_mbox, junk_mbox, trash_mbox, archive_mbox)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             $userId,
             $identityId,
             $label,
-            self::ENABLED,
+            $switchable ? self::ENABLED : 0,
             self::AUTH_IMAP,
             self::AUTH_IMAP,
             (string) $assignment['credential_provider'],
@@ -212,6 +284,11 @@ final class AssignmentReconciler
             1,
             (string) $assignment['id'],
             1,
+            self::DEFAULT_FOLDERS['drafts'],
+            self::DEFAULT_FOLDERS['sent'],
+            self::DEFAULT_FOLDERS['junk'],
+            self::DEFAULT_FOLDERS['trash'],
+            self::DEFAULT_FOLDERS['archive'],
         );
         $recordId = $query ? (int) $this->database->insert_id('ident_switch') : 0;
         if ($recordId < 1) {
@@ -222,8 +299,13 @@ final class AssignmentReconciler
     }
 
     /** @param array<string, mixed> $assignment */
-    private function updateManagedRecord(int $recordId, int $userId, int $identityId, array $assignment): void
-    {
+    private function updateManagedRecord(
+        int $recordId,
+        int $userId,
+        int $identityId,
+        array $assignment,
+        bool $switchable,
+    ): void {
         $label = $this->uniqueLabel(
             $userId,
             $this->label($assignment),
@@ -232,18 +314,27 @@ final class AssignmentReconciler
         );
         $query = $this->database->query(
             'UPDATE ' . $this->database->table_name('ident_switch')
-            . ' SET iid = ?, label = ?, flags = flags | ?, smtp_auth = ?, sieve_auth = ?,'
-            . ' notify_check = ?, credential_provider = ?, credential_reference = ?, managed_externally = ?'
+            . ' SET iid = ?, label = ?, flags = (flags & ?) | ?, smtp_auth = ?, sieve_auth = ?,'
+            . ' notify_check = ?, credential_provider = ?, credential_reference = ?, managed_externally = ?,'
+            . ' drafts_mbox = COALESCE(drafts_mbox, ?), sent_mbox = COALESCE(sent_mbox, ?),'
+            . ' junk_mbox = COALESCE(junk_mbox, ?), trash_mbox = COALESCE(trash_mbox, ?),'
+            . ' archive_mbox = COALESCE(archive_mbox, ?)'
             . ' WHERE id = ? AND user_id = ? AND managed_assignment_id = ?',
             $identityId,
             $label,
-            self::ENABLED,
+            ~self::ENABLED,
+            $switchable ? self::ENABLED : 0,
             self::AUTH_IMAP,
             self::AUTH_IMAP,
             1,
             (string) $assignment['credential_provider'],
             (string) $assignment['credential_reference'],
             1,
+            self::DEFAULT_FOLDERS['drafts'],
+            self::DEFAULT_FOLDERS['sent'],
+            self::DEFAULT_FOLDERS['junk'],
+            self::DEFAULT_FOLDERS['trash'],
+            self::DEFAULT_FOLDERS['archive'],
             $recordId,
             $userId,
             (string) $assignment['id'],

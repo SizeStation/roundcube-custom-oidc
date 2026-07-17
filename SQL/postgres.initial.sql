@@ -45,7 +45,6 @@ CREATE TABLE sizestation_mailbox_assignments (
     last_used_at varchar(32),
     last_error_code varchar(64),
     UNIQUE(issuer, external_user_id, mailbox_address),
-    UNIQUE(credential_provider, credential_reference),
     UNIQUE(principal_id, mailbox_address),
     UNIQUE(issuer, external_user_id, anchor_guard),
     UNIQUE(issuer, external_user_id, preferred_guard),
@@ -59,6 +58,8 @@ CREATE INDEX IX_sizestation_assignments_principal
     ON sizestation_mailbox_assignments(principal_id);
 CREATE INDEX IX_sizestation_assignments_external
     ON sizestation_mailbox_assignments(issuer, external_user_id);
+CREATE INDEX IX_sizestation_assignments_credential
+    ON sizestation_mailbox_assignments(credential_provider, credential_reference);
 
 CREATE TABLE sizestation_oidc_audit_log (
     id bigserial PRIMARY KEY,
@@ -90,7 +91,7 @@ CREATE TABLE sizestation_oidc_rate_limits (
     expires_at varchar(32) NOT NULL
 );
 
-INSERT INTO system (name, value) VALUES ('sizestation_oidc-version', '2026071602');
+INSERT INTO system (name, value) VALUES ('sizestation_oidc-version', '2026071701');
 
 CREATE TABLE ident_switch
 (
@@ -130,6 +131,7 @@ CREATE TABLE ident_switch
     sent_mbox varchar(64),
     junk_mbox varchar(64),
     trash_mbox varchar(64),
+    archive_mbox varchar(64),
     UNIQUE (user_id, label)
 );
 
@@ -137,5 +139,5 @@ CREATE INDEX IX_ident_switch_user_id ON ident_switch(user_id);
 CREATE INDEX IX_ident_switch_iid ON ident_switch(iid);
 CREATE INDEX IX_ident_switch_parent_id ON ident_switch(parent_id);
 
-INSERT INTO system (name, value) VALUES ('ident_switch-version', '2026071600');
-INSERT INTO system (name, value) VALUES ('roundcube_oidc_suite-version', '2026071700');
+INSERT INTO system (name, value) VALUES ('ident_switch-version', '2026071701');
+INSERT INTO system (name, value) VALUES ('roundcube_oidc_suite-version', '2026071701');

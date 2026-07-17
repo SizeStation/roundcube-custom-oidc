@@ -579,11 +579,6 @@ class IdentSwitchForm
             $args['record'] = [];
         }
 
-        // Do not show options for default identity
-        if (!empty($args['record']['email']) && strcasecmp($args['record']['email'], $rc->user->data['username']) === 0) {
-            return $args;
-        }
-
         $this->plugin->add_texts('plugins/ident_switch/localization');
 
         $preconfigOnly = $rc->config->get('ident_switch.preconfig_only', false);
@@ -612,6 +607,16 @@ class IdentSwitchForm
             $sql = 'SELECT * FROM ' . $rc->db->table_name(ident_switch::TABLE) . ' WHERE iid = ? AND user_id = ?';
             $q = $rc->db->query($sql, $args['record']['identity_id'], $rc->user->ID);
             $row = $rc->db->fetch_assoc($q);
+        }
+
+        // The login identity has a metadata-only managed record. Unmanaged
+        // default identities keep Roundcube's normal form without switch fields.
+        if (
+            !$this->credentials->isManaged($row)
+            && !empty($args['record']['email'])
+            && strcasecmp($args['record']['email'], $rc->user->data['username']) === 0
+        ) {
+            return $args;
         }
 
         $record = &$args['record'];

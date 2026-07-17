@@ -29,18 +29,26 @@ through `bin/roundcube-oidc-admin raw CLI_ARGUMENTS...`.
 ## Provision before first login
 
 Obtain the immutable Authentik OIDC `sub` value. With `user_uuid` subject mode,
-this is the Authentik user UUID. Provision exactly one anchor; the anchor is
-permanent after first successful login.
+this is the Authentik user UUID. Provision exactly one login (anchor) mailbox;
+its only special role is supplying the initial IMAP login. After authentication
+it is materialized, displayed, and given standard folders exactly like every
+other managed mailbox. Changing it after first login remains a separate account
+migration.
 
 ```sh
-bin/roundcube-oidc-admin --dry-run provision AUTHENTIK_SUB user@sizestation.com
-bin/roundcube-oidc-admin provision AUTHENTIK_SUB user@sizestation.com
+bin/roundcube-oidc-admin --dry-run add-email AUTHENTIK_SUB user@sizestation.com
+bin/roundcube-oidc-admin add-email AUTHENTIK_SUB user@sizestation.com
 ```
 
-The launcher requests the Purelymail password through a hidden prompt and
-generates an opaque credential reference automatically.
+The launcher first looks for a previously provisioned credential belonging to
+the same normalized mailbox address. If one validates successfully, it reuses
+that OpenBao reference without prompting or writing another secret. Otherwise
+it requests the Purelymail password through a hidden prompt and generates an
+opaque credential reference automatically.
 
-Add a secondary mailbox for the same Authentik subject. The launcher validates
+Use the same command to add another mailbox for the same Authentik subject. The
+first assignment automatically becomes both anchor and preferred; later ones
+are ordinary assignments. The launcher validates
 IMAP and SMTP by default, writes OpenBao, creates the assignment, and never
 prints the password:
 
@@ -75,7 +83,9 @@ bin/roundcube-oidc-admin disable-user PRINCIPAL_ID
 
 Do not disable/remove the only enabled anchor. `remove-email` retires the
 database assignment for auditability but retains its OpenBao credential.
-`purge-email` also deletes that credential and requires confirmation. Disabling
+`purge-email` also deletes that credential and requires confirmation. Deletion
+is refused while another retained assignment shares the credential reference.
+Existing duplicate OpenBao paths are never deleted automatically. Disabling
 a principal blocks new OIDC login but does not replace a full incident-response
 session revocation procedure.
 
@@ -88,7 +98,8 @@ bin/roundcube-oidc-admin audit PRINCIPAL_ID
 ```
 
 Reconciliation is idempotent. It repairs missing managed identities and switch
-rows, disables orphaned/disabled rows, and restores the preferred mapping. Run
+rows (including metadata for the login mailbox), assigns Drafts, Sent, Junk,
+Trash, and Archive, disables orphaned/disabled rows, and restores the preferred mapping. Run
 it after assignment changes and after a partial materialization failure.
 
 ## Upgrade the fork

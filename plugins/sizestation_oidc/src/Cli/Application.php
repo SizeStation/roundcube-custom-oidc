@@ -90,20 +90,60 @@ final class Application
         $issuer = $this->required($options, 'issuer');
         $externalId = $this->required($options, 'external-user-id');
         $mailbox = $this->required($options, 'mailbox');
-        $reference = new CredentialReference($this->required($options, 'credential-reference'));
-        $anchor = !empty($options['anchor']);
-        $preferred = !empty($options['preferred']);
         $dryRun = !empty($options['dry-run']);
         $username = is_string($options['username'] ?? null) ? $options['username'] : $mailbox;
         $this->assertMailboxUsername($mailbox, $username);
-        $createsSecret = !empty($options['password-stdin']);
+        $reuseExisting = !empty($options['reuse-existing']);
+        if ($reuseExisting && !empty($options['password-stdin'])) {
+            throw new RuntimeException('--reuse-existing cannot be combined with --password-stdin');
+        }
+        $createsSecret = !$reuseExisting && !empty($options['password-stdin']);
+        $repository = new AdminRepository($this->database);
+        $firstMailbox = !$repository->hasAssignmentForExternalUser($issuer, $externalId);
+        $anchor = $firstMailbox || !empty($options['anchor']);
+        $preferred = $firstMailbox || !empty($options['preferred']);
+        $reference = null;
         $password = '';
         $credentials = null;
         try {
+            if ($reuseExisting) {
+                $lastFailure = null;
+                foreach ($repository->reusableCredentialReferences($mailbox) as $candidate) {
+                    try {
+                        $reference = new CredentialReference($candidate);
+                        $credentials = ($this->credentialResolver)([
+                            'id' => '00000000-0000-4000-8000-000000000000',
+                            'mailbox_address' => $mailbox,
+                            'credential_provider' => 'openbao',
+                            'credential_reference' => $reference->value,
+                            'managed_externally' => 1,
+                        ]);
+                        $this->assertMailboxUsername($mailbox, $credentials->imapUsername());
+                        $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
+                        break;
+                    } catch (\Throwable $exception) {
+                        $credentials?->erase();
+                        $credentials = null;
+                        $reference = null;
+                        $lastFailure = $exception;
+                    }
+                }
+                if ($reference === null) {
+                    if ($lastFailure !== null) {
+                        throw $lastFailure;
+                    }
+                    throw new ReusableCredentialNotFoundException(
+                        'No previously provisioned credential exists for this mailbox',
+                    );
+                }
+            } else {
+                $reference = new CredentialReference($this->required($options, 'credential-reference'));
+            }
+
             if ($createsSecret) {
                 $password = $this->password($options, $stdin);
                 $credentials = new AccountCredentials($username, $password);
-            } else {
+            } elseif (!$reuseExisting) {
                 $credentials = ($this->credentialResolver)([
                     'id' => '00000000-0000-4000-8000-000000000000',
                     'mailbox_address' => $mailbox,
@@ -113,13 +153,17 @@ final class Application
                 ]);
                 $this->assertMailboxUsername($mailbox, $credentials->imapUsername());
             }
-            $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
+            if (!$reuseExisting) {
+                $this->validator?->validate($credentials, $this->validateImap, $this->validateSmtp);
+            }
             if ($dryRun) {
                 return [
                     'ok' => true,
                     'dry_run' => true,
                     'command' => 'assignment:create',
                     'mailbox' => $mailbox,
+                    'anchor' => $anchor,
+                    'preferred' => $preferred,
                     'database_changes' => ['create pending mailbox assignment'],
                     'openbao_paths' => [$reference->value],
                     'ident_switch_record_ids' => [],
@@ -134,7 +178,6 @@ final class Application
             if ($createsSecret) {
                 $this->provisioner->create($reference, ['username' => $username, 'password' => $password]);
             }
-            $repository = new AdminRepository($this->database);
             try {
                 $assignment = $repository->createAssignment(
                     $issuer,
@@ -172,6 +215,9 @@ final class Application
                 'mailbox' => $assignment['mailbox_address'],
                 'anchor' => (bool) $assignment['is_anchor'],
                 'preferred' => (bool) $assignment['is_preferred'],
+                'first_mailbox' => $firstMailbox,
+                'credential_reused' => $reuseExisting,
+                'credential_reference' => $reference->value,
             ];
         } finally {
             $credentials?->erase();
@@ -298,15 +344,27 @@ final class Application
     private function remove(array $options): array
     {
         $assignment = $this->assignment($options);
+        $repository = new AdminRepository($this->database);
+        $deleteSecret = !empty($options['delete-secret']);
+        if (
+            $deleteSecret
+            && $repository->credentialReferenceUsedByAnotherRetainedAssignment(
+                (string) $assignment['id'],
+                (string) $assignment['credential_provider'],
+                (string) $assignment['credential_reference'],
+            )
+        ) {
+            throw new RuntimeException('A credential shared by another retained assignment cannot be deleted');
+        }
         if (!empty($options['dry-run'])) {
             return $this->assignmentDryRun(
                 'assignment:remove',
                 $assignment,
                 ['retire assignment', 'disable managed switch record during reconciliation'],
-                !empty($options['delete-secret']) ? [(string) $assignment['credential_reference']] : [],
+                $deleteSecret ? [(string) $assignment['credential_reference']] : [],
             );
         }
-        $removed = (new AdminRepository($this->database))->removeAssignment((string) $assignment['id']);
+        $removed = $repository->removeAssignment((string) $assignment['id']);
         $this->auditRepository()->record(
             AuditEvent::AssignmentRemoved,
             'cli',
@@ -314,7 +372,7 @@ final class Application
             $removed['principal_id'] === null ? null : (int) $removed['principal_id'],
             (string) $removed['id'],
         );
-        if (!empty($options['delete-secret'])) {
+        if ($deleteSecret) {
             $this->provisioner->delete(new CredentialReference((string) $removed['credential_reference']));
         }
         $this->reconcilePrincipalOf($removed);
@@ -803,6 +861,7 @@ final class Application
     {
         return match (true) {
             $exception instanceof \InvalidArgumentException => 'invalid_argument',
+            $exception instanceof ReusableCredentialNotFoundException => 'reusable_credential_not_found',
             $exception instanceof MailboxValidationException => $exception->errorCode,
             $exception instanceof ExternalCredentialException => $exception->errorCode,
             $exception instanceof RuntimeException => 'operation_rejected',
@@ -881,7 +940,9 @@ Commands:
   principal:show --principal-id ID
   principal:disable|principal:enable --principal-id ID
   assignment:create --issuer URL --external-user-id ID --mailbox ADDRESS
-                    --credential-reference PATH [--password-stdin] [--anchor] [--preferred]
+                    (--reuse-existing | --credential-reference PATH [--password-stdin])
+                    [--preferred]
+                    (the first mailbox automatically becomes anchor and preferred)
   assignment:list [--principal-id ID]
   assignment:show --assignment-id UUID
   assignment:disable|assignment:enable|assignment:remove --assignment-id UUID

@@ -53,13 +53,14 @@ final class ReconciliationTest extends TestCase
         $reconciler = new AssignmentReconciler($this->database);
 
         $first = $reconciler->reconcile($this->principalId, 10, $bound);
-        self::assertSame(1, $first->created);
+        self::assertSame(2, $first->created);
         self::assertNotNull($first->preferredSwitchRecordId);
-        self::assertSame('00000000-0000-4000-8000-000000000002', $first->materialized[0]['assignment_id']);
+        self::assertSame('00000000-0000-4000-8000-000000000001', $first->materialized[0]['assignment_id']);
+        self::assertSame('00000000-0000-4000-8000-000000000002', $first->materialized[1]['assignment_id']);
 
         $row = $this->database->pdo->query(
             'SELECT password, credential_provider, credential_reference, managed_externally'
-            . ' FROM ident_switch',
+            . " FROM ident_switch WHERE managed_assignment_id = '00000000-0000-4000-8000-000000000002'",
         )->fetch(PDO::FETCH_ASSOC);
         self::assertNull($row['password']);
         self::assertSame('openbao', $row['credential_provider']);
@@ -72,9 +73,16 @@ final class ReconciliationTest extends TestCase
             'external-1',
         ));
         self::assertSame(0, $second->created);
-        self::assertSame(1, $second->updated);
-        self::assertSame(1, (int) $this->database->pdo->query('SELECT COUNT(*) FROM ident_switch')->fetchColumn());
-        self::assertSame(1, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
+        self::assertSame(2, $second->updated);
+        self::assertSame(2, (int) $this->database->pdo->query('SELECT COUNT(*) FROM ident_switch')->fetchColumn());
+        self::assertSame(2, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
+
+        $anchor = $this->database->pdo->query(
+            "SELECT flags, drafts_mbox, sent_mbox, junk_mbox, trash_mbox, archive_mbox"
+            . " FROM ident_switch WHERE managed_assignment_id = '00000000-0000-4000-8000-000000000001'",
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame(0, (int) $anchor['flags']);
+        self::assertSame(['Drafts', 'Sent', 'Junk', 'Trash', 'Archive'], array_values(array_slice($anchor, 1)));
     }
 
     public function testActiveManagedAssignmentGuardRequiresReturnAfterAdministrativeDisable(): void
@@ -83,7 +91,7 @@ final class ReconciliationTest extends TestCase
         $bound = $assignments->bindPending($this->principalId, 'https://issuer.example', 'external-1');
         (new AssignmentReconciler($this->database))->reconcile($this->principalId, 10, $bound);
         $record = $this->database->pdo->query(
-            'SELECT iid, managed_assignment_id FROM ident_switch',
+            'SELECT iid, managed_assignment_id FROM ident_switch WHERE flags & 1 > 0',
         )->fetch(PDO::FETCH_ASSOC);
         $guard = new ActiveManagedAssignmentGuard($this->database);
 
@@ -135,8 +143,11 @@ final class ReconciliationTest extends TestCase
             'external-1',
         ));
         self::assertSame(1, $result->disabled);
-        self::assertSame(0, (int) $this->database->pdo->query('SELECT flags FROM ident_switch')->fetchColumn());
-        self::assertSame(1, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
+        self::assertSame(0, (int) $this->database->pdo->query(
+            "SELECT flags FROM ident_switch"
+            . " WHERE managed_assignment_id = '00000000-0000-4000-8000-000000000002'",
+        )->fetchColumn());
+        self::assertSame(2, (int) $this->database->pdo->query('SELECT COUNT(*) FROM identities')->fetchColumn());
     }
 
     public function testSecondaryMaterializationFailurePreservesInitializedAnchorAndRollsBackSecondaries(): void

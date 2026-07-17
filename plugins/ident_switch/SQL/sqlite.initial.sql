@@ -93,10 +93,12 @@ CREATE TABLE ident_switch
 		varchar(64),
 	trash_mbox
 		varchar(64),
+	archive_mbox
+		varchar(64),
 	UNIQUE (user_id, label)
 );
 CREATE INDEX IX_ident_switch_user_id ON ident_switch(user_id);
 CREATE INDEX IX_ident_switch_iid ON ident_switch(iid);
 CREATE INDEX IX_ident_switch_parent_id ON ident_switch(parent_id);
 
-INSERT INTO system (name, value) VALUES ('ident_switch-version', '2026071600');
+INSERT INTO system (name, value) VALUES ('ident_switch-version', '2026071701');

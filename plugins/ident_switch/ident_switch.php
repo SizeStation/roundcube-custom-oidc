@@ -149,7 +149,6 @@ class ident_switch extends rcube_plugin
 
             if ($args['task'] === 'mail') {
                 $this->add_texts('plugins/ident_switch/localization/');
-                $rc->config->set('create_default_folders', false);
             }
         }
 
@@ -160,7 +159,36 @@ class ident_switch extends rcube_plugin
             $rc->config->set($type . '_mbox', $val);
         }
 
+        if ($args['task'] === 'mail' && $this->activeAccountIsManaged($rc)) {
+            // Roundcube invokes storage::create_default_folders() on the first
+            // connection. Managed accounts should all receive the same standard
+            // mailbox lifecycle, including the metadata-only anchor account.
+            $rc->config->set('create_default_folders', true);
+        }
+
         return $args;
+    }
+
+    private function activeAccountIsManaged(rcmail $rc): bool
+    {
+        $identityId = $_SESSION['iid' . self::MY_POSTFIX] ?? null;
+        if ($identityId === -1 || $identityId === '-1' || $identityId === null) {
+            $identity = $rc->user?->get_identity();
+            $identityId = $identity['identity_id'] ?? null;
+        }
+        if (!is_int($identityId) && !(is_string($identityId) && ctype_digit($identityId))) {
+            return false;
+        }
+
+        $query = $rc->db->query(
+            'SELECT managed_externally FROM ' . $rc->db->table_name(self::TABLE)
+            . ' WHERE user_id = ? AND iid = ?',
+            $rc->user->ID,
+            (int) $identityId,
+        );
+        $row = $rc->db->fetch_assoc($query);
+
+        return is_array($row) && !empty($row['managed_externally']);
     }
 
     /**
@@ -235,8 +263,8 @@ class ident_switch extends rcube_plugin
             return;
         }
 
-        $this->include_stylesheet('ident_switch-rc17.css');
-        $this->include_script('plugins/ident_switch/ident_switch-switch.js?v=1.0.0-rc.17');
+        $this->include_stylesheet('ident_switch-rc18.css');
+        $this->include_script('plugins/ident_switch/ident_switch-switch.js?v=1.0.0-rc.18');
 
         // Pass config to JS environment
         $rc->output->set_env('ident_switch_iid_map', $iidMap);

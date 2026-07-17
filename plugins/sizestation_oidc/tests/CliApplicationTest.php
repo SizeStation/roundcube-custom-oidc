@@ -88,6 +88,108 @@ final class CliApplicationTest extends TestCase
         )->fetchColumn());
     }
 
+    public function testFirstMailboxDefaultsToAnchorAndPreferredWhileLaterMailboxesDoNot(): void
+    {
+        [$firstExit, $firstOutput] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=first@example.test',
+            '--credential-reference=mailboxes/first', '--password-stdin', '--json',
+        ], "first-secret\n");
+        [$secondExit, $secondOutput] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=second@example.test',
+            '--credential-reference=mailboxes/second', '--password-stdin', '--json',
+        ], "second-secret\n");
+
+        self::assertSame(0, $firstExit);
+        self::assertSame(0, $secondExit);
+        $first = json_decode($firstOutput, true, flags: JSON_THROW_ON_ERROR);
+        $second = json_decode($secondOutput, true, flags: JSON_THROW_ON_ERROR);
+        self::assertTrue($first['first_mailbox']);
+        self::assertTrue($first['anchor']);
+        self::assertTrue($first['preferred']);
+        self::assertFalse($second['first_mailbox']);
+        self::assertFalse($second['anchor']);
+        self::assertFalse($second['preferred']);
+    }
+
+    public function testAssignmentCreateReusesAProvisionedMailboxCredentialAcrossPrincipals(): void
+    {
+        [$firstExit] = $this->runApplication([
+            'sizestation-oidc',
+            'assignment:create',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=contact@example.test',
+            '--credential-reference=mailboxes/contact-original',
+            '--anchor',
+            '--password-stdin',
+            '--json',
+        ], "first-secret\n");
+        [$secondExit, $secondOutput, $secondError] = $this->runApplication([
+            'sizestation-oidc',
+            'assignment:create',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-2',
+            '--mailbox=contact@example.test',
+            '--reuse-existing',
+            '--anchor',
+            '--json',
+        ], '');
+
+        self::assertSame(0, $firstExit);
+        self::assertSame(0, $secondExit);
+        self::assertSame('', $secondError);
+        $result = json_decode($secondOutput, true, flags: JSON_THROW_ON_ERROR);
+        self::assertTrue($result['credential_reused']);
+        self::assertSame('mailboxes/contact-original', $result['credential_reference']);
+        self::assertSame(2, (int) $this->database->pdo->query(
+            "SELECT COUNT(*) FROM sizestation_mailbox_assignments"
+            . " WHERE credential_reference = 'mailboxes/contact-original'",
+        )->fetchColumn());
+        self::assertCount(1, $this->provisioner->writes);
+    }
+
+    public function testReuseExistingReportsAStableErrorWhenMailboxWasNeverProvisioned(): void
+    {
+        [$exit, $stdout, $stderr] = $this->runApplication([
+            'sizestation-oidc',
+            'assignment:create',
+            '--issuer=https://issuer.example',
+            '--external-user-id=external-1',
+            '--mailbox=missing@example.test',
+            '--reuse-existing',
+            '--anchor',
+            '--json',
+        ], '');
+
+        self::assertSame(1, $exit);
+        self::assertSame('', $stdout);
+        self::assertStringContainsString('reusable_credential_not_found', $stderr);
+        self::assertSame([], $this->provisioner->writes);
+    }
+
+    public function testCredentialReferenceCannotBeReusedForAnotherMailbox(): void
+    {
+        [$firstExit] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-1', '--mailbox=one@example.test',
+            '--credential-reference=mailboxes/shared', '--anchor', '--password-stdin', '--json',
+        ], "first-secret\n");
+        [$secondExit, , $secondError] = $this->runApplication([
+            'sizestation-oidc', 'assignment:create', '--issuer=https://issuer.example',
+            '--external-user-id=external-2', '--mailbox=two@example.test',
+            '--credential-reference=mailboxes/shared', '--anchor', '--json',
+        ], '');
+
+        self::assertSame(0, $firstExit);
+        self::assertSame(1, $secondExit);
+        self::assertStringContainsString('operation_rejected', $secondError);
+        self::assertSame(1, (int) $this->database->pdo->query(
+            'SELECT COUNT(*) FROM sizestation_mailbox_assignments',
+        )->fetchColumn());
+    }
+
     public function testExistingSecretUsernameMustMatchTheMailbox(): void
     {
         [$exit, $stdout, $stderr] = $this->runApplication([

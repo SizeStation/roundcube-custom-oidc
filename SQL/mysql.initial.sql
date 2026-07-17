@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS `sizestation_mailbox_assignments` (
     `last_error_code` varchar(64),
     PRIMARY KEY (`id`),
     UNIQUE KEY `sizestation_assignment_external_mailbox` (`issuer`, `external_user_id`, `mailbox_address`),
-    UNIQUE KEY `sizestation_assignment_credential_reference` (`credential_provider`, `credential_reference`),
+    INDEX `IX_sizestation_assignments_credential` (`credential_provider`, `credential_reference`),
     UNIQUE KEY `sizestation_assignment_principal_mailbox` (`principal_id`, `mailbox_address`),
     UNIQUE KEY `sizestation_assignment_anchor` (`issuer`, `external_user_id`, `anchor_guard`),
     UNIQUE KEY `sizestation_assignment_preferred` (`issuer`, `external_user_id`, `preferred_guard`),
@@ -100,7 +100,7 @@ CREATE TABLE `sizestation_oidc_rate_limits` (
     CHECK (`attempts` > 0)
 ) ROW_FORMAT=DYNAMIC ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-INSERT INTO `system` (`name`, `value`) VALUES ('sizestation_oidc-version', '2026071602');
+INSERT INTO `system` (`name`, `value`) VALUES ('sizestation_oidc-version', '2026071701');
 
 CREATE TABLE IF NOT EXISTS `ident_switch`
 (
@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS `ident_switch`
     `sent_mbox` varchar(64),
     `junk_mbox` varchar(64),
     `trash_mbox` varchar(64),
+    `archive_mbox` varchar(64),
     UNIQUE KEY `user_id_label` (`user_id`, `label`),
     UNIQUE KEY `ident_switch_managed_assignment` (`managed_assignment_id`),
     CONSTRAINT `fk_ident_switch_user_id` FOREIGN KEY (`user_id`)
@@ -150,5 +151,5 @@ CREATE TABLE IF NOT EXISTS `ident_switch`
     INDEX `IX_ident_switch_parent_id`(`parent_id`)
 );
 
-INSERT INTO `system` (`name`, `value`) VALUES ('ident_switch-version', '2026071600');
-INSERT INTO `system` (`name`, `value`) VALUES ('roundcube_oidc_suite-version', '2026071700');
+INSERT INTO `system` (`name`, `value`) VALUES ('ident_switch-version', '2026071701');
+INSERT INTO `system` (`name`, `value`) VALUES ('roundcube_oidc_suite-version', '2026071701');

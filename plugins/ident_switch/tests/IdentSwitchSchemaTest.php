@@ -22,8 +22,9 @@ final class IdentSwitchSchemaTest extends TestCase
         self::assertContains('credential_reference', $columns);
         self::assertContains('managed_externally', $columns);
         self::assertContains('managed_assignment_id', $columns);
+        self::assertContains('archive_mbox', $columns);
         self::assertSame(
-            '2026071600',
+            '2026071701',
             $database->query("SELECT value FROM system WHERE name = 'ident_switch-version'")->fetchColumn(),
         );
     }
@@ -50,11 +51,13 @@ final class IdentSwitchSchemaTest extends TestCase
         $database->exec('CREATE TABLE ident_switch (id integer primary key)');
         $database->exec("INSERT INTO system (name, value) VALUES ('ident_switch-version', '2026021000')");
         $database->exec(file_get_contents(__DIR__ . '/../SQL/sqlite/2026071600.sql'));
+        $database->exec(file_get_contents(__DIR__ . '/../SQL/sqlite/2026071701.sql'));
 
         $columns = $database->query('PRAGMA table_info(ident_switch)')->fetchAll(PDO::FETCH_COLUMN, 1);
         self::assertContains('managed_assignment_id', $columns);
+        self::assertContains('archive_mbox', $columns);
         self::assertSame(
-            '2026071600',
+            '2026071701',
             $database->query("SELECT value FROM system WHERE name = 'ident_switch-version'")->fetchColumn(),
         );
     }

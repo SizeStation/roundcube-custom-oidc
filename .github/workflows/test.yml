@@ -51,7 +51,7 @@ jobs:
             'CREATE TABLE users (user_id integer PRIMARY KEY); CREATE TABLE identities (identity_id integer PRIMARY KEY)'
           psql -h 127.0.0.1 -U postgres -d roundcube -f SQL/postgres.initial.sql
           test "$(psql -h 127.0.0.1 -U postgres -d roundcube -Atc \
-            "SELECT value FROM system WHERE name='sizestation_oidc-version'")" = 2026071602
+            "SELECT value FROM system WHERE name='sizestation_oidc-version'")" = 2026071701
 
   mariadb-schema:
     runs-on: ubuntu-latest
@@ -80,4 +80,4 @@ jobs:
             'CREATE TABLE users (user_id int unsigned PRIMARY KEY); CREATE TABLE identities (identity_id int unsigned PRIMARY KEY)'
           mysql -h 127.0.0.1 -u root roundcube < SQL/mysql.initial.sql
           test "$(mysql -h 127.0.0.1 -u root -N -s roundcube -e \
-            "SELECT value FROM system WHERE name='sizestation_oidc-version'")" = 2026071602
+            "SELECT value FROM system WHERE name='sizestation_oidc-version'")" = 2026071701

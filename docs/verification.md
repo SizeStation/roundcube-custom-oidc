@@ -10,8 +10,8 @@ remained untouched.
 - Fresh SQLite plugin migration: Roundcube's official Composer installer
   reported `[OK]` and created both internal schemas from the combined SQL set.
 - Fresh PostgreSQL 16 and MariaDB 11 schemas: both plugin schemas applied to
-  isolated containers and recorded `ident_switch-version=2026071600` and
-  `sizestation_oidc-version=2026071602`.
+  isolated containers and recorded `ident_switch-version=2026071701` and
+  `sizestation_oidc-version=2026071701`.
 - The single `sizestation/roundcube-oidc-suite` package passed strict Composer
   validation and a clean locked install. Roundcube installed it directly at
   `plugins/roundcube_oidc_suite`; its one entrypoint loaded OIDC, shared

@@ -116,8 +116,11 @@ It invokes the existing `ident_switch` switch service rather than duplicating it
   secret, and supplies the fixed configured IMAP endpoint. It never trusts login
   form values.
 - Materialization is idempotent by assignment UUID and never matches labels.
-- The anchor is permanent after first successful login; changing it is a
-  separate migration operation.
+- The anchor differs only during the login handshake. Reconciliation otherwise
+  materializes it as a normal managed identity with a metadata-only,
+  non-switchable record so the account is not shown twice.
+- Changing the anchor after first successful login is a separate migration
+  operation.
 
 ## Cross-database constraints
 
@@ -127,6 +130,9 @@ anchor and at-most-one preferred are protected by transactional repository
 checks with row/database locking appropriate to each engine, plus unique guard
 columns/indexes where supported. Concurrency tests are mandatory for first
 binding and preferred changes. Application checks alone are not sufficient.
+Credential references are intentionally reusable across assignments for the
+same normalized mailbox; repository checks reject sharing one reference across
+different mailbox addresses.
 
 ## Deployment decisions
 

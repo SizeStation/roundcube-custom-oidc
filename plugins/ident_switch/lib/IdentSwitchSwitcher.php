@@ -76,7 +76,7 @@ class IdentSwitchSwitcher
             }
         } else {
             $sql = 'SELECT imap_host, flags, imap_port, imap_delimiter, drafts_mbox, sent_mbox,'
-                . ' junk_mbox, trash_mbox, ' . IdentSwitchCredentialService::ACCOUNT_FIELDS
+                . ' junk_mbox, trash_mbox, archive_mbox, ' . IdentSwitchCredentialService::ACCOUNT_FIELDS
                 . ' FROM ' . $rc->db->table_name(ident_switch::TABLE)
                 . ' WHERE id = ? AND user_id = ? AND flags & ? > 0';
             $q = $rc->db->query($sql, $identId, $rc->user->ID, ident_switch::DB_ENABLED);
@@ -439,7 +439,7 @@ class IdentSwitchSwitcher
             if ($r) {
                 $sql = 'UPDATE ' .
                     $rc->db->table_name(ident_switch::TABLE) .
-                    ' SET drafts_mbox = ?, sent_mbox = ?, junk_mbox = ?, trash_mbox = ?' .
+                    ' SET drafts_mbox = ?, sent_mbox = ?, junk_mbox = ?, trash_mbox = ?, archive_mbox = ?' .
                     ' WHERE id = ?';
 
                 $rc->db->query(
@@ -448,6 +448,7 @@ class IdentSwitchSwitcher
                     $args['prefs']['sent_mbox'],
                     $args['prefs']['junk_mbox'],
                     $args['prefs']['trash_mbox'],
+                    $args['prefs']['archive_mbox'] ?? null,
                     $r['id']
                 );
 

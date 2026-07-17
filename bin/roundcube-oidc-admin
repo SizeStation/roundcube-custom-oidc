@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-VERSION="${ROUNDCUBE_OIDC_ADMIN_VERSION:-1.0.0-rc.17}"
+VERSION="${ROUNDCUBE_OIDC_ADMIN_VERSION:-1.0.0-rc.18}"
 IMAGE="${ROUNDCUBE_OIDC_ADMIN_IMAGE:-roundcube/roundcubemail:1.7.x-apache}"
 ISSUER="${ROUNDCUBE_OIDC_ISSUER:-https://auth.sizestation.com/application/o/roundcube/}"
 OPENBAO_ADDRESS="${ROUNDCUBE_OPENBAO_ADDRESS:-https://bao.sizestation.cloud}"
@@ -20,7 +20,6 @@ usage() {
 Roundcube OIDC mailbox administration
 
 Usage:
-  roundcube-oidc-admin [--dry-run] provision SUB MAILBOX [LABEL]
   roundcube-oidc-admin [--dry-run] add-email SUB MAILBOX [LABEL]
   roundcube-oidc-admin users
   roundcube-oidc-admin user PRINCIPAL_ID
@@ -41,9 +40,11 @@ Usage:
   roundcube-oidc-admin audit [PRINCIPAL_ID]
   roundcube-oidc-admin raw CLI_ARGUMENTS...
 
-The provision command creates the permanent anchor mailbox. add-email adds a
-secondary mailbox. Passwords are requested through a hidden prompt and are
-never placed in command arguments or shell history.
+Use add-email for every mailbox. The first mailbox for a user automatically
+becomes the login and preferred mailbox; later ones are ordinary assignments.
+It reuses a previously validated credential for the same mailbox when
+available; otherwise the password is requested through a hidden prompt.
+Passwords are never placed in command arguments or shell history.
 
 Configuration environment variables:
   ROUNDCUBE_OPENBAO_APPROLE_ID             OpenBao AppRole role_id
@@ -52,7 +53,7 @@ Configuration environment variables:
   ROUNDCUBE_OIDC_PROVISIONING_TOKEN_FILE  default: /root/.secrets/openbao-provisioning-token
   ROUNDCUBE_OIDC_ISSUER                   default: https://auth.sizestation.com/application/o/roundcube/
   ROUNDCUBE_OPENBAO_ADDRESS               default: https://bao.sizestation.cloud
-  ROUNDCUBE_OIDC_ADMIN_VERSION            default: 1.0.0-rc.17
+  ROUNDCUBE_OIDC_ADMIN_VERSION            default: 1.0.0-rc.18
   ROUNDCUBE_OIDC_ADMIN_FORMAT             human or json; default: human
 USAGE
 }
@@ -168,20 +169,25 @@ case "$command_name" in
         require_argument "$sub" 'SUB'
         require_argument "$mailbox" 'MAILBOX'
         arguments=(
-            provision
+            assignment:create
             --issuer "$ISSUER"
             --external-user-id "$sub"
             --mailbox "$mailbox"
-            --credential-reference "$(credential_reference "$sub" "$mailbox")"
             "${dry_run[@]}"
         )
         if [[ -n "$label" ]]; then
             arguments+=(--label "$label")
         fi
-        if [[ "$command_name" == 'provision' ]]; then
-            arguments+=(--anchor --preferred)
+        reuse_output=''
+        if reuse_output="$(docker_command "${arguments[@]}" --reuse-existing 2>&1)"; then
+            printf '%s\n' "$reuse_output"
+        elif [[ "$reuse_output" == *'reusable_credential_not_found'* ]]; then
+            arguments+=(--credential-reference "$(credential_reference "$sub" "$mailbox")")
+            password_command "${arguments[@]}"
+        else
+            printf '%s\n' "$reuse_output" >&2
+            exit 1
         fi
-        password_command "${arguments[@]}"
         ;;
     users)
         docker_command principal:list

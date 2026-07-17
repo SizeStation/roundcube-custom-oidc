@@ -33,6 +33,8 @@ patches remain reviewable.
 - Added portable managed credential columns and the `2026071600` migration for
   SQLite, PostgreSQL, and MySQL/MariaDB. Legacy password columns remain intact
   for unmanaged accounts; managed rows leave them unused.
+- Added `archive_mbox` in the `2026071701` migration and provision all standard
+  folders for externally managed login and switched mailboxes.
 - Routed account switching, alias-aware SMTP, ManageSieve, background unread
   checks, and primary-account return state through the provider registry.
 - Added request-local provider reuse and sanitized provider failure handling.

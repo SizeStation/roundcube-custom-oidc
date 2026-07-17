@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS `ident_switch`
 		varchar(64),
 	`trash_mbox`
 		varchar(64),
+	`archive_mbox`
+		varchar(64),
 	UNIQUE KEY `user_id_label` (`user_id`, `label`),
 	UNIQUE KEY `ident_switch_managed_assignment` (`managed_assignment_id`),
 	CONSTRAINT `fk_user_id` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -101,4 +103,4 @@ CREATE TABLE IF NOT EXISTS `ident_switch`
 	INDEX `IX_ident_switch_parent_id`(`parent_id`)
 );
 
-INSERT INTO `system` (`name`, `value`) VALUES ('ident_switch-version', '2026071600');
+INSERT INTO `system` (`name`, `value`) VALUES ('ident_switch-version', '2026071701');

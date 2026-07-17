@@ -36,6 +36,7 @@ final class AdminRepository
         $id = (string) OpaqueId::generate();
         $now = gmdate('Y-m-d\TH:i:s\Z');
         $principalId = $this->principalId($issuer, $externalUserId);
+        $this->assertCredentialReferenceMatchesMailbox('openbao', $credentialReference, $mailbox);
         $query = $this->database->query(
             'INSERT INTO ' . $this->database->table_name('sizestation_mailbox_assignments')
             . ' (id, issuer, external_user_id, principal_id, mailbox_address, display_label, credential_provider,'
@@ -68,6 +69,58 @@ final class AdminRepository
         return $this->assignment($id) ?? throw new RepositoryException('Created assignment could not be loaded');
     }
 
+    /** @return list<string> */
+    public function reusableCredentialReferences(string $mailbox): array
+    {
+        $mailbox = (string) new MailboxAddress($mailbox);
+        $query = $this->database->query(
+            'SELECT credential_reference,'
+            . " MAX(CASE WHEN credential_status = 'valid' THEN 1 ELSE 0 END) AS known_valid,"
+            . " MAX(COALESCE(last_validated_at, '')) AS validated_at, MIN(created_at) AS first_created"
+            . ' FROM ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' WHERE mailbox_address = ? AND credential_provider = ?'
+            . ' GROUP BY credential_reference'
+            . ' ORDER BY known_valid DESC, validated_at DESC, first_created ASC, credential_reference ASC',
+            $mailbox,
+            'openbao',
+        );
+        $references = [];
+        while ($row = $this->database->fetch_assoc($query)) {
+            $references[] = (string) $row['credential_reference'];
+        }
+
+        return $references;
+    }
+
+    public function hasAssignmentForExternalUser(string $issuer, string $externalUserId): bool
+    {
+        $query = $this->database->query(
+            'SELECT id FROM ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' WHERE issuer = ? AND external_user_id = ?',
+            $issuer,
+            $externalUserId,
+        );
+
+        return is_array($this->database->fetch_assoc($query));
+    }
+
+    public function credentialReferenceUsedByAnotherRetainedAssignment(
+        string $assignmentId,
+        string $provider,
+        string $reference,
+    ): bool {
+        $query = $this->database->query(
+            'SELECT id FROM ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' WHERE credential_provider = ? AND credential_reference = ? AND id <> ?'
+            . " AND materialization_status <> 'orphaned'",
+            $provider,
+            $reference,
+            $assignmentId,
+        );
+
+        return is_array($this->database->fetch_assoc($query));
+    }
+
     /** @return array<string, mixed>|null */
     public function assignment(string $assignmentId): ?array
     {
@@ -86,16 +139,19 @@ final class AdminRepository
         if (!in_array($status, ['unknown', 'valid', 'invalid', 'unavailable'], true)) {
             throw new RuntimeException('Credential status is invalid');
         }
+        $assignment = $this->requiredAssignment($assignmentId);
         $query = $this->database->query(
             'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
-            . ' SET credential_status = ?, last_validated_at = ?, last_error_code = ?, updated_at = ? WHERE id = ?',
+            . ' SET credential_status = ?, last_validated_at = ?, last_error_code = ?, updated_at = ?'
+            . ' WHERE credential_provider = ? AND credential_reference = ?',
             $status,
             gmdate('Y-m-d\TH:i:s\Z'),
             $errorCode,
             gmdate('Y-m-d\TH:i:s\Z'),
-            $assignmentId,
+            (string) $assignment['credential_provider'],
+            (string) $assignment['credential_reference'],
         );
-        if (!$query || $this->database->affected_rows($query) !== 1) {
+        if (!$query || $this->database->affected_rows($query) < 1) {
             throw new RepositoryException('Unable to update credential status');
         }
     }
@@ -401,6 +457,24 @@ final class AdminRepository
         $row = $this->database->fetch_assoc($query);
 
         return is_array($row) ? (int) $row['id'] : null;
+    }
+
+    private function assertCredentialReferenceMatchesMailbox(
+        string $provider,
+        string $reference,
+        string $mailbox,
+    ): void {
+        $query = $this->database->query(
+            'SELECT mailbox_address FROM ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' WHERE credential_provider = ? AND credential_reference = ?',
+            $provider,
+            $reference,
+        );
+        while ($row = $this->database->fetch_assoc($query)) {
+            if (!hash_equals($mailbox, (string) new MailboxAddress((string) $row['mailbox_address']))) {
+                throw new RuntimeException('A credential reference cannot be shared by different mailboxes');
+            }
+        }
     }
 
     /** @param array<string, mixed> $assignment */
