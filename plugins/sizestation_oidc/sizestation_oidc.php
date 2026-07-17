@@ -646,7 +646,7 @@ class roundcube_oidc_suite extends ident_switch
             $clientId,
             $this->requiredConfig('sizestation_oidc.client_secret_file'),
             $this->requiredConfig('sizestation_oidc.redirect_uri'),
-            (array) $rc->config->get('sizestation_oidc.scopes', ['openid', 'profile', 'email', 'sizestation_user_id']),
+            (array) $rc->config->get('sizestation_oidc.scopes', ['openid', 'profile', 'email']),
             (string) $rc->config->get('sizestation_oidc.ca_file', ''),
             (int) $rc->config->get('sizestation_oidc.connect_timeout_seconds', 2),
             (int) $rc->config->get('sizestation_oidc.request_timeout_seconds', 5),
@@ -654,7 +654,7 @@ class roundcube_oidc_suite extends ident_switch
         $validation = new \SizeStation\Roundcube\Oidc\Security\TokenValidationConfig(
             $issuer,
             $clientId,
-            (string) $rc->config->get('sizestation_oidc.external_user_id_claim', 'sizestation_user_id'),
+            (string) $rc->config->get('sizestation_oidc.external_user_id_claim', 'sub'),
             (array) $rc->config->get('sizestation_oidc.allowed_algorithms', ['RS256']),
             (array) $rc->config->get('sizestation_oidc.allowed_groups', []),
             (string) $rc->config->get('sizestation_oidc.groups_claim', 'groups'),

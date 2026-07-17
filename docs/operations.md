@@ -19,7 +19,7 @@ docker run --rm -i --network public \
   --mount source=roundcube_bao_files,target=/run/secrets,readonly \
   --mount type=bind,src=/root/.secrets/openbao-provisioning-token,dst=/run/admin-secrets/openbao-provisioning-token,readonly \
   -e ROUNDCUBEMAIL_DB_TYPE=sqlite \
-  -e ROUNDCUBEMAIL_COMPOSER_PLUGINS=sizestation/roundcube-oidc-suite:1.0.0-rc.8 \
+  -e ROUNDCUBEMAIL_COMPOSER_PLUGINS=sizestation/roundcube-oidc-suite:1.0.0-rc.9 \
   -e ROUNDCUBEMAIL_PLUGINS=roundcube_oidc_suite \
   --entrypoint /docker-entrypoint.sh "$IMAGE" \
   bin/../plugins/roundcube_oidc_suite/bin/sizestation-oidc COMMAND_AND_OPTIONS
@@ -32,16 +32,17 @@ inside that one-shot container.
 
 ## Provision before first login
 
-Obtain the immutable Authentik UUID emitted as `sizestation_user_id`. Provision
-exactly one anchor; the anchor is permanent after first successful login.
+Obtain the immutable Authentik OIDC `sub` value. With `user_uuid` subject mode,
+this is the Authentik user UUID. Provision exactly one anchor; the anchor is
+permanent after first successful login.
 
 ```sh
 read -s MAIL_PASSWORD
 printf '%s' "$MAIL_PASSWORD" | /var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc provision \
   --issuer https://auth.sizestation.cloud/application/o/roundcube/ \
-  --external-user-id AUTHENTIK_UUID \
+  --external-user-id AUTHENTIK_SUB \
   --mailbox user@sizestation.com \
-  --credential-reference AUTHENTIK_UUID/anchor \
+  --credential-reference AUTHENTIK_SUB/anchor \
   --password-stdin --anchor --preferred --json
 unset MAIL_PASSWORD
 ```
@@ -58,7 +59,7 @@ secret but never rewrites or deletes it:
 ```sh
 /var/www/html/plugins/roundcube_oidc_suite/bin/sizestation-oidc assignment:create \
   --issuer https://auth.sizestation.cloud/application/o/roundcube/ \
-  --external-user-id AUTHENTIK_UUID \
+  --external-user-id AUTHENTIK_SUB \
   --mailbox admin@sizestation.com \
   --credential-reference OPAQUE_RANDOM_REFERENCE \
   --format json

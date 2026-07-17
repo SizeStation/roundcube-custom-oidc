@@ -14,7 +14,7 @@ final readonly class OidcClientConfig
         public string $clientId,
         public string $clientSecretFile,
         public string $redirectUri,
-        public array $scopes = ['openid', 'profile', 'email', 'sizestation_user_id'],
+        public array $scopes = ['openid', 'profile', 'email'],
         public string $caFile = '',
         public int $connectTimeoutSeconds = 2,
         public int $requestTimeoutSeconds = 5,

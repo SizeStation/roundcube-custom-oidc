@@ -56,6 +56,7 @@ final class OidcFlowServiceTest extends TestCase
         self::assertSame('code', $query['response_type']);
         self::assertSame('S256', $query['code_challenge_method']);
         self::assertSame('https://mail.example.test/oidc/callback', $query['redirect_uri']);
+        self::assertSame('openid profile email', $query['scope']);
         self::assertNotEmpty($query['state']);
         self::assertNotEmpty($query['nonce']);
         self::assertNotEmpty($query['code_challenge']);
@@ -73,7 +74,7 @@ final class OidcFlowServiceTest extends TestCase
         $transport->idToken = $this->token($nonce);
 
         $identity = $service->complete($session, $query['state'], 'authorization-code');
-        self::assertSame('external-1', $identity->externalUserId);
+        self::assertSame('subject-1', $identity->externalUserId);
         self::assertStringContainsString('client_secret=client-secret', $transport->tokenRequestBody);
         self::assertStringContainsString('code_verifier=', $transport->tokenRequestBody);
 
@@ -218,7 +219,6 @@ final class OidcFlowServiceTest extends TestCase
             'nbf' => $now - 10,
             'iat' => $now - 10,
             'nonce' => $nonce,
-            'sizestation_user_id' => 'external-1',
         ], $this->privateKey, 'RS256', 'flow-key');
     }
 

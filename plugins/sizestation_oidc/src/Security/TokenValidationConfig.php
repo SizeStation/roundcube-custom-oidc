@@ -12,7 +12,7 @@ final readonly class TokenValidationConfig
     public function __construct(
         public string $issuer,
         public string $clientId,
-        public string $externalUserIdClaim = 'sizestation_user_id',
+        public string $externalUserIdClaim = 'sub',
         public array $allowedAlgorithms = ['RS256'],
         public array $allowedGroups = [],
         public string $groupsClaim = 'groups',

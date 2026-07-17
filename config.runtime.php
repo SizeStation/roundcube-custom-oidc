@@ -32,6 +32,15 @@ $sizeStationEnvPath = static function (string $name, string $default): string {
 
     return $value !== '' ? $value : $default;
 };
+$sizeStationEnvList = static function (string $name, array $default) use ($sizeStationEnvOrFile): array {
+    $value = $sizeStationEnvOrFile($name);
+    if ($value === '') {
+        return $default;
+    }
+    $items = preg_split('/[\s,]+/', $value, -1, PREG_SPLIT_NO_EMPTY);
+
+    return is_array($items) ? array_values(array_unique($items)) : $default;
+};
 
 $config['sizestation_oidc.enabled'] = true;
 $config['sizestation_oidc.issuer'] = $sizeStationEnvOrFile(
@@ -51,8 +60,14 @@ $config['sizestation_oidc.post_logout_redirect_uri'] = $sizeStationEnvOrFile(
     'ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI',
     'https://mail.sizestation.cloud/',
 );
-$config['sizestation_oidc.scopes'] = ['openid', 'profile', 'email', 'sizestation_user_id'];
-$config['sizestation_oidc.external_user_id_claim'] = 'sizestation_user_id';
+$config['sizestation_oidc.scopes'] = $sizeStationEnvList(
+    'ROUNDCUBE_OIDC_SCOPES',
+    ['openid', 'profile', 'email'],
+);
+$config['sizestation_oidc.external_user_id_claim'] = $sizeStationEnvOrFile(
+    'ROUNDCUBE_OIDC_EXTERNAL_USER_ID_CLAIM',
+    'sub',
+);
 $config['sizestation_oidc.allowed_algorithms'] = ['RS256'];
 $config['sizestation_oidc.allowed_groups'] = [];
 $config['sizestation_oidc.groups_claim'] = 'groups';

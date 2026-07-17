@@ -15,6 +15,10 @@ final class RuntimeConfigTest extends TestCase
         'ROUNDCUBE_OIDC_CLIENT_ID',
         'ROUNDCUBE_OIDC_CLIENT_ID_FILE',
         'ROUNDCUBE_OIDC_CLIENT_SECRET_FILE',
+        'ROUNDCUBE_OIDC_SCOPES',
+        'ROUNDCUBE_OIDC_SCOPES_FILE',
+        'ROUNDCUBE_OIDC_EXTERNAL_USER_ID_CLAIM',
+        'ROUNDCUBE_OIDC_EXTERNAL_USER_ID_CLAIM_FILE',
         'ROUNDCUBE_OPENBAO_ADDRESS',
         'ROUNDCUBE_OPENBAO_ADDRESS_FILE',
         'ROUNDCUBE_OPENBAO_TOKEN_FILE',
@@ -51,11 +55,27 @@ final class RuntimeConfigTest extends TestCase
         );
         self::assertSame('roundcube-client', $config['sizestation_oidc.client_id']);
         self::assertSame('/run/secrets/client-secret', $config['sizestation_oidc.client_secret_file']);
+        self::assertSame(['openid', 'profile', 'email'], $config['sizestation_oidc.scopes']);
+        self::assertSame('sub', $config['sizestation_oidc.external_user_id_claim']);
         self::assertSame('/run/secrets/openbao-token', $config['sizestation_oidc.openbao_token_file']);
         self::assertSame(
             $config['sizestation_oidc.openbao_token_file'],
             $config['ident_switch.openbao_token_file'],
         );
+    }
+
+    public function testPackagedConfigSupportsOptionalCustomIdentityClaimAndScopes(): void
+    {
+        putenv('ROUNDCUBE_OIDC_SCOPES=openid profile email custom_identity');
+        putenv('ROUNDCUBE_OIDC_EXTERNAL_USER_ID_CLAIM=custom_identity');
+
+        $config = $this->loadConfig();
+
+        self::assertSame(
+            ['openid', 'profile', 'email', 'custom_identity'],
+            $config['sizestation_oidc.scopes'],
+        );
+        self::assertSame('custom_identity', $config['sizestation_oidc.external_user_id_claim']);
     }
 
     public function testDirectAndFileVariantsFailClosedWhenBothAreSet(): void

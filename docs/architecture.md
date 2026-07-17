@@ -107,8 +107,9 @@ It invokes the existing `ident_switch` switch service rather than duplicating it
   configured redirect URI, and a maintained JWT/OIDC library.
 - Validate signature/algorithm, issuer, audience, `azp` where applicable,
   expiry, not-before, issued-at tolerance, nonce, and required group claims.
-- Canonical principal is exact validated `(issuer, subject)`; the opaque
-  `sizestation_user_id` binds administrator-created assignments.
+- Canonical principal is the exact validated `(issuer, subject)` pair. The
+  standard OIDC `sub` value binds administrator-created assignments by default;
+  a custom stable claim is an explicit compatibility override.
 - Pending assignments bind atomically. Login fails closed unless exactly one
   enabled anchor exists.
 - The authenticate hook accepts only the server-side pending anchor, fetches its

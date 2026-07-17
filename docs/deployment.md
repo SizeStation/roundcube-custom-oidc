@@ -38,6 +38,11 @@ Docker-style file:
 - `ROUNDCUBE_OIDC_REDIRECT_URI` or `ROUNDCUBE_OIDC_REDIRECT_URI_FILE`
 - `ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI` or
   `ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI_FILE`
+- `ROUNDCUBE_OIDC_SCOPES` or `ROUNDCUBE_OIDC_SCOPES_FILE` optionally overrides
+  the whitespace- or comma-separated default `openid profile email`
+- `ROUNDCUBE_OIDC_EXTERNAL_USER_ID_CLAIM` or
+  `ROUNDCUBE_OIDC_EXTERNAL_USER_ID_CLAIM_FILE` optionally overrides the
+  standard `sub` identity claim
 - `ROUNDCUBE_OIDC_CLIENT_SECRET_FILE` is the path to the secret file rendered
   by the Agent; the client secret itself is intentionally never accepted as an
   environment value.

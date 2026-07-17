@@ -18,7 +18,7 @@ In **Applications → Applications**, create an application with an
 - redirect URI:
   `https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback`;
 - flows: Authorization Code; do not enable implicit flow for this client;
-- scopes: `openid`, `profile`, `email`, and `sizestation_user_id`;
+- scopes: `openid`, `profile`, and `email`;
 - refresh/offline access: not required.
 
 The configured Roundcube issuer must exactly equal:
@@ -32,25 +32,22 @@ from that issuer. Copy the client ID into the stack environment. Store the
 client secret only at `kv/roundcube/oidc` as `client_secret`; the Agent
 renders it into tmpfs.
 
-## Stable pre-provisioning claim
+## Stable pre-provisioning identity
 
-Create an OAuth2/OpenID **Scope Mapping** under **Customization → Property
-Mappings**:
-
-```text
-Name: SizeStation stable user ID
-Scope name: sizestation_user_id
-Expression:
-return {"sizestation_user_id": str(request.user.uuid)}
-```
-
-Select that mapping on the Roundcube provider. Use the exact resulting UUID as
-the CLI `--external-user-id`. Treat it as an opaque value. Do not use email,
-username, display name, or group slug as the binding key.
+The plugin uses the standard OIDC `sub` claim as its external user identifier.
+Authentik emits `sub` automatically when the `openid` scope is requested, so no
+custom scope mapping is required. Use the exact `sub` value as the CLI
+`--external-user-id` and treat it as opaque. With Authentik's `user_uuid`
+subject mode, this is the user's immutable UUID. Do not use email, username,
+display name, or group slug as the binding key.
 
 Before production, use Authentik's provider preview or decode a test ID token
-locally and confirm that `sizestation_user_id` is a non-empty stable string.
-Never paste a production token into an online decoder.
+locally and confirm that `sub` is a non-empty stable string. Never paste a
+production token into an online decoder.
+
+Deployments that intentionally use a custom stable claim can set
+`ROUNDCUBE_OIDC_EXTERNAL_USER_ID_CLAIM` and add its scope through
+`ROUNDCUBE_OIDC_SCOPES`. New deployments should keep the standard defaults.
 
 ## Group authorization
 

@@ -43,7 +43,7 @@ final class IdTokenValidatorTest extends TestCase
 
         self::assertSame('https://issuer.example/application/o/roundcube/', $identity->issuer);
         self::assertSame('subject-1', $identity->subject);
-        self::assertSame('external-1', $identity->externalUserId);
+        self::assertSame('subject-1', $identity->externalUserId);
         self::assertSame(['mail-users'], $identity->groups);
     }
 
@@ -138,7 +138,6 @@ final class IdTokenValidatorTest extends TestCase
             'exp' => $now + 300,
             'iat' => $now,
             'nonce' => 'expected-nonce',
-            'sizestation_user_id' => 'external-1',
         ];
 
         $this->expectException(RuntimeException::class);
@@ -148,6 +147,25 @@ final class IdTokenValidatorTest extends TestCase
             'expected-nonce',
             $now,
         );
+    }
+
+    public function testSupportsConfiguredCustomExternalIdentityClaim(): void
+    {
+        $now = time();
+        $validator = new IdTokenValidator(new TokenValidationConfig(
+            'https://issuer.example/application/o/roundcube/',
+            'roundcube-client',
+            externalUserIdClaim: 'custom_identity',
+        ));
+
+        $identity = $validator->validate(
+            $this->token(['custom_identity' => 'external-1'], $now),
+            $this->jwks,
+            'expected-nonce',
+            $now,
+        );
+
+        self::assertSame('external-1', $identity->externalUserId);
     }
 
     /** @param list<string> $groups */
@@ -172,7 +190,6 @@ final class IdTokenValidatorTest extends TestCase
             'iat' => $now - 10,
             'auth_time' => $now - 20,
             'nonce' => 'expected-nonce',
-            'sizestation_user_id' => 'external-1',
             'email' => 'user@example.test',
             'email_verified' => true,
         ], $overrides);
