@@ -22,6 +22,16 @@ $(function() {
 
 	var $sw = $wrapper.find('#plugin-ident_switch-account');
 	var placed = false;
+	var enhanced = false;
+
+	// Keep the select as the source of truth and as a fallback for older skins.
+	$sw.find('option').each(function() {
+		$(this).data('orig-text', $(this).text());
+	});
+
+	if (rcmail.env.skin === 'elastic') {
+		enhanced = ident_switch_buildMenu($wrapper, $sw);
+	}
 
 	switch (rcmail.env.skin) {
 		case 'larry':
@@ -39,12 +49,11 @@ $(function() {
 		return;
 	}
 
-	$sw.show();
-
-	// Store original option texts for badge appending
-	$sw.find('option').each(function() {
-		$(this).data('orig-text', $(this).text());
-	});
+	if (enhanced) {
+		$sw.hide().attr({'aria-hidden': 'true', 'tabindex': '-1'});
+	} else {
+		$sw.show();
+	}
 
 	// Register server-side notification listeners
 	rcmail.addEventListener('plugin.ident_switch.update_counts', ident_switch_updateCounts);
@@ -55,6 +64,161 @@ $(function() {
 		ident_switch_updateCounts(rcmail.env.ident_switch_initial_counts);
 	}
 });
+
+/**
+ * Build the Elastic skin account menu around the existing select.
+ *
+ * The native select remains in the DOM so existing switching and unread-count
+ * behaviour continue to work if the enhanced UI cannot be used.
+ */
+function ident_switch_buildMenu($wrapper, $sw) {
+	var $selected = $sw.find('option:selected');
+	if (!$selected.length) {
+		return false;
+	}
+
+	var $button = $('<button>', {
+		type: 'button',
+		'class': 'ident-switch-button',
+		'aria-haspopup': 'menu',
+		'aria-expanded': 'false'
+	});
+	$button.append($('<span>', {'class': 'ident-switch-avatar', 'aria-hidden': 'true'}));
+	$button.append($('<span>', {'class': 'ident-switch-current-label'}));
+	$button.append($('<span>', {'class': 'ident-switch-chevron', 'aria-hidden': 'true'}));
+
+	var $menu = $('<div>', {
+		'class': 'ident-switch-menu',
+		role: 'menu',
+		'aria-label': rcmail.env.ident_switch_switch_label || 'Switch account'
+	}).hide();
+
+	$sw.find('option').each(function() {
+		var value = String($(this).val());
+		var label = $(this).data('orig-text') || $(this).text();
+		var $item = $('<button>', {
+			type: 'button',
+			'class': 'ident-switch-option',
+			role: 'menuitemradio',
+			'aria-checked': 'false',
+			'data-value': value
+		});
+		$item.append($('<span>', {
+			'class': 'ident-switch-option-avatar',
+			'aria-hidden': 'true',
+			text: ident_switch_initial(label)
+		}));
+		$item.append($('<span>', {'class': 'ident-switch-option-label', text: label}));
+		$item.append($('<span>', {'class': 'ident-switch-check', 'aria-hidden': 'true'}));
+		$menu.append($item);
+	});
+
+	$wrapper.addClass('ident-switch-enhanced').append($button, $menu);
+	ident_switch_syncMenu($sw, $wrapper);
+
+	function closeMenu(focusButton) {
+		$menu.hide();
+		$button.attr('aria-expanded', 'false');
+		$wrapper.removeClass('ident-switch-open');
+		if (focusButton) {
+			$button.trigger('focus');
+		}
+	}
+
+	function openMenu(focusSelected) {
+		$menu.show();
+		$button.attr('aria-expanded', 'true');
+		$wrapper.addClass('ident-switch-open');
+		if (focusSelected) {
+			var $active = $menu.find('.ident-switch-option.is-active');
+			($active.length ? $active : $menu.find('.ident-switch-option').first()).trigger('focus');
+		}
+	}
+
+	$button.on('click', function() {
+		if ($button.attr('aria-expanded') === 'true') {
+			closeMenu(false);
+		} else {
+			openMenu(false);
+		}
+	}).on('keydown', function(event) {
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			event.preventDefault();
+			openMenu(true);
+		} else if (event.key === 'Escape') {
+			closeMenu(false);
+		}
+	});
+
+	$menu.on('click', '.ident-switch-option', function() {
+		var value = String($(this).data('value'));
+		if (value === String($sw.val())) {
+			closeMenu(true);
+			return;
+		}
+		$button.prop('disabled', true).addClass('is-switching');
+		$sw.val(value);
+		ident_switch_syncMenu($sw, $wrapper);
+		closeMenu(false);
+		plugin_switchIdent_switch(value);
+	}).on('keydown', '.ident-switch-option', function(event) {
+		var $items = $menu.find('.ident-switch-option');
+		var index = $items.index(this);
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			event.preventDefault();
+			index += event.key === 'ArrowDown' ? 1 : -1;
+			$items.eq((index + $items.length) % $items.length).trigger('focus');
+		} else if (event.key === 'Home' || event.key === 'End') {
+			event.preventDefault();
+			$items.eq(event.key === 'Home' ? 0 : -1).trigger('focus');
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			closeMenu(true);
+		} else if (event.key === 'Tab') {
+			closeMenu(false);
+		}
+	});
+
+	$(document).on('mousedown.identSwitch', function(event) {
+		if (!$wrapper.is(event.target) && !$wrapper.has(event.target).length) {
+			closeMenu(false);
+		}
+	});
+	$(window).on('resize.identSwitch', function() {
+		closeMenu(false);
+	});
+
+	return true;
+}
+
+function ident_switch_initial(label) {
+	var normalized = $.trim(String(label || ''));
+	return normalized ? normalized.charAt(0).toUpperCase() : '@';
+}
+
+/** Sync visible menu labels, selection state, and avatar from the native select. */
+function ident_switch_syncMenu($sw, $wrapper) {
+	var selectedValue = String($sw.val());
+	var $selected = $sw.find('option:selected');
+	var selectedLabel = $selected.data('orig-text') || $selected.text();
+
+	$wrapper.find('.ident-switch-current-label').text(selectedLabel);
+	$wrapper.find('.ident-switch-avatar').text(ident_switch_initial(selectedLabel));
+	$wrapper.find('.ident-switch-button').attr(
+		'aria-label',
+		(rcmail.env.ident_switch_switch_label || 'Switch account') + ': ' + selectedLabel
+	);
+	$wrapper.find('.ident-switch-option').each(function() {
+		var $item = $(this);
+		var value = String($item.data('value'));
+		var $option = $sw.find('option').filter(function() {
+			return String($(this).val()) === value;
+		});
+		var active = value === selectedValue;
+		$item.toggleClass('is-active', active).attr('aria-checked', active ? 'true' : 'false');
+		$item.find('.ident-switch-option-label').text($option.text());
+	});
+}
 
 /**
  * Place switcher in Larry skin: replace username in top-right corner of #topline.
@@ -190,6 +354,11 @@ function ident_switch_updateCounts(data) {
 		$badge.text(totalDelta).show();
 	} else {
 		$badge.hide().text('');
+	}
+
+	var $wrapper = $('#ident-switch-wrapper');
+	if ($wrapper.hasClass('ident-switch-enhanced')) {
+		ident_switch_syncMenu($select, $wrapper);
 	}
 }
 

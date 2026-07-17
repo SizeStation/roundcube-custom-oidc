@@ -52,6 +52,11 @@ These values configure the Roundcube OIDC client; the matching provider/client
 must still exist in Authentik because an environment variable cannot create
 server-side Authentik resources.
 
+The packaged configuration enables `sizestation_oidc.auto_redirect`, so an
+unauthenticated visit starts the Authentik authorization flow immediately.
+Set it to `false` in the installation's local `config.inc.php` only when a
+visible login page is required for troubleshooting.
+
 Changing the existing DES key invalidates Roundcube-encrypted data.
 Create the external Swarm `roundcube_bao_role_id` and
 `roundcube_bao_secret_id` secrets from the AppRole credentials.

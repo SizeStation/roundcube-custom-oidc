@@ -66,7 +66,11 @@ class roundcube_oidc_suite extends ident_switch
             return $args;
         }
 
-        if ($action === 'plugin.sizestation_oidc.login') {
+        $autoRedirect = (bool) rcmail::get_instance()->config->get(
+            'sizestation_oidc.auto_redirect',
+            true,
+        );
+        if ($action === 'plugin.sizestation_oidc.login' || ($action === '' && $autoRedirect)) {
             try {
                 rcmail::get_instance()->output->redirect($this->flow()->authorizationUrl($_SESSION));
             } catch (\Throwable $exception) {

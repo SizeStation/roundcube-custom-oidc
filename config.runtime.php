@@ -71,6 +71,7 @@ $config['sizestation_oidc.external_user_id_claim'] = $sizeStationEnvOrFile(
 $config['sizestation_oidc.allowed_algorithms'] = ['RS256'];
 $config['sizestation_oidc.allowed_groups'] = [];
 $config['sizestation_oidc.groups_claim'] = 'groups';
+$config['sizestation_oidc.auto_redirect'] = true;
 $config['sizestation_oidc.hide_password_form'] = true;
 $config['sizestation_oidc.source_url'] = 'https://github.com/SizeStation/roundcube-custom-oidc';
 $config['sizestation_oidc.clock_tolerance_seconds'] = 60;

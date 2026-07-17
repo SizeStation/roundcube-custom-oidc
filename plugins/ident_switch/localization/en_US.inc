@@ -172,6 +172,7 @@ $labels['err.smtp.connect'] = 'SMTP connection failed. Please check the server a
 $labels['err.sieve.connect'] = 'Sieve connection failed. Please check the server address, port, and credentials.';
 
 $labels['managed.title'] = 'Managed account';
+$labels['switchaccount'] = 'Switch account';
 $labels['managed.notice'] = 'Managed by SizeStation. Credentials and server settings are controlled by an administrator.';
 $labels['err.managed'] = 'This managed account cannot be deleted or reconfigured here.';
 $labels['err.managed_only'] = 'Additional mail accounts must be assigned by an administrator.';

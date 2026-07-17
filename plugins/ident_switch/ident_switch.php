@@ -240,6 +240,7 @@ class ident_switch extends rcube_plugin
 
         // Pass config to JS environment
         $rc->output->set_env('ident_switch_iid_map', $iidMap);
+        $rc->output->set_env('ident_switch_switch_label', $this->gettext('switchaccount'));
 
         $select = new html_select([
             'id' => 'plugin-ident_switch-account',

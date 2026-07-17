@@ -44,12 +44,169 @@
    parent's flex/line-height context, keeping the wrapper vertically centered. */
 .header-title.username {
 	visibility: hidden;
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: visible;
 }
 .header-title.username > *:not(.ident-switch-wrapper) {
 	display: none;
 }
 .header-title.username > .ident-switch-wrapper {
 	visibility: visible;
+}
+
+/* Elastic skin: an account control styled like the surrounding dark sidebar.
+   The original select stays hidden underneath as the source of truth. */
+.header-title.username > .ident-switch-wrapper.ident-switch-enhanced {
+	position: relative;
+	display: flex;
+	width: 100%;
+	min-width: 0;
+}
+.ident-switch-enhanced > #plugin-ident_switch-account {
+	display: none !important;
+}
+.ident-switch-button {
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+	width: 100%;
+	min-width: 0;
+	min-height: 2.5rem;
+	margin: 0;
+	padding: 0.35rem 0.55rem;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 0.45rem;
+	color: #f1f3f4;
+	background: rgba(255, 255, 255, 0.06);
+	box-shadow: none;
+	-webkit-appearance: none;
+	appearance: none;
+	font-family: inherit;
+	font-size: 0.9rem;
+	font-weight: 600;
+	line-height: 1.25;
+	text-align: left;
+	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease;
+}
+.ident-switch-button:hover,
+.ident-switch-button:focus,
+.ident-switch-open .ident-switch-button {
+	color: #fff;
+	background: rgba(255, 255, 255, 0.12);
+	border-color: rgba(255, 255, 255, 0.18);
+	outline: none;
+}
+.ident-switch-button:focus-visible {
+	box-shadow: 0 0 0 2px #37beff;
+}
+.ident-switch-button:disabled {
+	cursor: wait;
+	opacity: 0.72;
+}
+.ident-switch-avatar,
+.ident-switch-option-avatar {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 1.8rem;
+	height: 1.8rem;
+	border-radius: 50%;
+	color: #172126;
+	background: #d7e6ec;
+	font-size: 0.78rem;
+	font-weight: 700;
+	line-height: 1;
+}
+.ident-switch-current-label {
+	min-width: 0;
+	flex: 1 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ident-switch-chevron {
+	flex: 0 0 auto;
+	width: 0.5rem;
+	height: 0.5rem;
+	margin: -0.2rem 0.2rem 0 0.25rem;
+	border-right: 2px solid currentColor;
+	border-bottom: 2px solid currentColor;
+	transform: rotate(45deg);
+	transition: transform 120ms ease, margin 120ms ease;
+}
+.ident-switch-open .ident-switch-chevron {
+	margin-top: 0.2rem;
+	transform: rotate(225deg);
+}
+.ident-switch-menu {
+	position: absolute;
+	z-index: 10000;
+	top: calc(100% + 0.4rem);
+	left: 0;
+	width: max-content;
+	min-width: 100%;
+	max-width: min(22rem, calc(100vw - 1rem));
+	padding: 0.35rem;
+	border: 1px solid #3c484d;
+	border-radius: 0.5rem;
+	background: #20282c;
+	box-shadow: 0 0.75rem 1.75rem rgba(0, 0, 0, 0.36);
+}
+.ident-switch-option {
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+	width: 100%;
+	min-width: 0;
+	padding: 0.5rem 0.6rem;
+	border: 0;
+	border-radius: 0.35rem;
+	color: #e9edef;
+	background: transparent;
+	-webkit-appearance: none;
+	appearance: none;
+	font-family: inherit;
+	font-size: 0.9rem;
+	font-weight: 500;
+	line-height: 1.25;
+	text-align: left;
+	cursor: pointer;
+}
+.ident-switch-option:hover,
+.ident-switch-option:focus {
+	color: #fff;
+	background: #303c41;
+	outline: none;
+}
+.ident-switch-option.is-active {
+	background: #35484f;
+}
+.ident-switch-option-label {
+	min-width: 0;
+	flex: 1 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ident-switch-check {
+	flex: 0 0 auto;
+	width: 1rem;
+	color: #57c7ff;
+	font-weight: 700;
+	text-align: center;
+}
+.ident-switch-option.is-active .ident-switch-check::before {
+	content: "\2713";
+}
+.ident-switch-enhanced > .ident-switch-badge {
+	position: absolute;
+	z-index: 2;
+	top: -0.35rem;
+	right: -0.35rem;
+	margin: 0;
 }
 
 /* Larry skin: switcher is prepended next to .username inside #topline .topright */

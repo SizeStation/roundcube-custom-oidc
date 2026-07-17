@@ -61,6 +61,7 @@ final class RuntimeConfigTest extends TestCase
             $config['sizestation_oidc.issuer'],
         );
         self::assertSame('roundcube-client', $config['sizestation_oidc.client_id']);
+        self::assertTrue($config['sizestation_oidc.auto_redirect']);
         self::assertSame('/run/secrets/client-secret', $config['sizestation_oidc.client_secret_file']);
         self::assertSame(['openid', 'profile', 'email'], $config['sizestation_oidc.scopes']);
         self::assertSame('sub', $config['sizestation_oidc.external_user_id_claim']);
