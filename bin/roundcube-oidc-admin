@@ -114,7 +114,7 @@ docker_command() {
         -e ROUNDCUBE_OPENBAO_TOKEN_FILE=/run/secrets/openbao-token \
         --entrypoint /docker-entrypoint.sh \
         "$IMAGE" \
-        plugins/roundcube_oidc_suite/bin/sizestation-oidc \
+        bin/../plugins/roundcube_oidc_suite/bin/sizestation-oidc \
         "$@" --format "$FORMAT"
 }
 
