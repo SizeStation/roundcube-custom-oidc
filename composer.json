@@ -1,11 +1,12 @@
 {
     "name": "sizestation/roundcube-oidc-suite",
     "description": "Single-package Authentik OIDC and OpenBao-managed multi-account support for Roundcube",
-    "type": "library",
+    "type": "roundcube-plugin",
     "license": "AGPL-3.0-or-later",
     "require": {
         "firebase/php-jwt": "^7.1",
-        "php": ">=8.2"
+        "php": ">=8.2",
+        "roundcube/plugin-installer": "^0.3.11"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.5",
@@ -24,8 +25,16 @@
         }
     },
     "config": {
-        "allow-plugins": false,
+        "allow-plugins": {
+            "roundcube/plugin-installer": true
+        },
         "sort-packages": true
+    },
+    "extra": {
+        "roundcube": {
+            "min-version": "1.7",
+            "sql-dir": "SQL"
+        }
     },
     "scripts": {
         "test": "phpunit",

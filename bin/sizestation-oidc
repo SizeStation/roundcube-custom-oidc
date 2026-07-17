@@ -17,11 +17,6 @@ if (in_array($_SERVER['argv'][1] ?? 'help', ['help', '--help', '-h'], true)) {
 }
 
 $rcmail = rcmail::get_instance();
-$pluginConfig = INSTALL_PATH . 'plugins/sizestation_oidc/config.inc.php';
-if (is_file($pluginConfig)) {
-    $rcmail->config->load_from_file($pluginConfig);
-}
-
 $required = static function (string $key) use ($rcmail): string {
     $value = $rcmail->config->get($key);
     if (!is_string($value) || trim($value) === '') {

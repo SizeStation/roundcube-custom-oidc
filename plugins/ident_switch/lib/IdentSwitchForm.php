@@ -584,7 +584,7 @@ class IdentSwitchForm
             return $args;
         }
 
-        $this->plugin->add_texts('localization');
+        $this->plugin->add_texts('plugins/ident_switch/localization');
 
         $preconfigOnly = $rc->config->get('ident_switch.preconfig_only', false);
         $domainAllowed = empty($args['record']['email']) || $this->is_domain_allowed($args['record']['email']);
@@ -813,7 +813,7 @@ class IdentSwitchForm
         // mode === 'separate': full validation + save
         $data = $this->validate();
         if (!empty($data['err'])) {
-            $this->plugin->add_texts('localization');
+            $this->plugin->add_texts('plugins/ident_switch/localization');
             $args['abort'] = true;
             $args['result'] = false;
             $args['message'] = 'ident_switch.err.' . $data['err'];
@@ -828,7 +828,7 @@ class IdentSwitchForm
         // Test connections before saving
         $connErr = $this->test_connections($data, $args['record']['email'], $testPass);
         if ($connErr) {
-            $this->plugin->add_texts('localization');
+            $this->plugin->add_texts('plugins/ident_switch/localization');
             $args['abort'] = true;
             $args['result'] = false;
             $args['message'] = 'ident_switch.err.' . $connErr;
@@ -886,7 +886,7 @@ class IdentSwitchForm
         // mode === 'separate': full validation
         $data = $this->validate();
         if (!empty($data['err'])) {
-            $this->plugin->add_texts('localization');
+            $this->plugin->add_texts('plugins/ident_switch/localization');
             $args['abort'] = true;
             $args['result'] = false;
             $args['message'] = 'ident_switch.err.' . $data['err'];
@@ -901,7 +901,7 @@ class IdentSwitchForm
         // Test connections before saving
         $connErr = $this->test_connections($data, $args['record']['email'], $testPass);
         if ($connErr) {
-            $this->plugin->add_texts('localization');
+            $this->plugin->add_texts('plugins/ident_switch/localization');
             $args['abort'] = true;
             $args['result'] = false;
             $args['message'] = 'ident_switch.err.' . $connErr;
@@ -957,7 +957,7 @@ class IdentSwitchForm
         $rc = rcmail::get_instance();
 
         if ($this->credentials->isManaged($this->credentials->accountByIdentity((int) $args['id'], false))) {
-            $this->plugin->add_texts('localization');
+            $this->plugin->add_texts('plugins/ident_switch/localization');
             $args['abort'] = true;
             $args['result'] = false;
             $args['message'] = 'ident_switch.err.managed';
@@ -978,7 +978,7 @@ class IdentSwitchForm
     /** @param array<string, mixed> $args */
     private function managedOnlyError(array $args): array
     {
-        $this->plugin->add_texts('localization');
+        $this->plugin->add_texts('plugins/ident_switch/localization');
         $args['abort'] = true;
         $args['result'] = false;
         $args['message'] = 'ident_switch.err.managed_only';

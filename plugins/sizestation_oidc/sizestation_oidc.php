@@ -6,7 +6,7 @@
  * Copyright (C) 2026 SizeStation
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-class sizestation_oidc extends rcube_plugin
+class roundcube_oidc_suite extends ident_switch
 {
     public $task = 'login|logout|mail|settings';
 
@@ -24,7 +24,8 @@ class sizestation_oidc extends rcube_plugin
             return;
         }
 
-        $this->add_texts('localization/');
+        parent::init();
+        $this->add_texts('plugins/sizestation_oidc/localization/');
         $this->add_hook('startup', [$this, 'onStartup']);
         $this->add_hook('loginform_content', [$this, 'onLoginForm']);
         $this->add_hook('authenticate', [$this, 'onAuthenticate']);
@@ -581,7 +582,7 @@ class sizestation_oidc extends rcube_plugin
         }
         $rc->output->set_env('sizestation_oidc_accounts', $accounts);
         $rc->output->set_env('sizestation_oidc_account_prompt', $this->gettext('selectmailbox'));
-        $this->include_script('account-select.js');
+        $this->include_script('plugins/sizestation_oidc/account-select.js');
     }
 
     private function selectedManagedRecordAllowed(int $recordId, int $principalId): bool
@@ -779,6 +780,7 @@ class sizestation_oidc extends rcube_plugin
     {
         $autoloaders = [
             '/opt/sizestation/vendor/autoload.php',
+            dirname(__DIR__, 4) . '/vendor/autoload.php',
             dirname(__DIR__, 2) . '/vendor/autoload.php',
         ];
         foreach ($autoloaders as $autoloader) {

@@ -32,8 +32,7 @@ final class CliApplicationTest extends TestCase
             . 'del integer NOT NULL DEFAULT 0, standard integer NOT NULL DEFAULT 0,'
             . 'name varchar(128) NOT NULL DEFAULT \'\', email varchar(128) NOT NULL DEFAULT \'\','
             . 'signature text NOT NULL DEFAULT \'\', html_signature integer NOT NULL DEFAULT 0)');
-        $pdo->exec(file_get_contents(__DIR__ . '/../SQL/sqlite.initial.sql'));
-        $pdo->exec(file_get_contents(__DIR__ . '/../../ident_switch/SQL/sqlite.initial.sql'));
+        $pdo->exec(file_get_contents(dirname(__DIR__, 3) . '/SQL/sqlite.initial.sql'));
         $this->database = new \rcube_db($pdo);
         $this->provisioner = new FakeSecretProvisioner();
     }

@@ -13,4 +13,18 @@ final class PackageSmokeTest extends TestCase
     {
         self::assertSame('imap', CredentialPurpose::Imap->value);
     }
+
+    public function testPackageIsAStandardRoundcubePlugin(): void
+    {
+        $package = json_decode(
+            (string) file_get_contents(dirname(__DIR__) . '/composer.json'),
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        );
+
+        self::assertSame('roundcube-plugin', $package['type']);
+        self::assertSame('SQL', $package['extra']['roundcube']['sql-dir']);
+        self::assertFileExists(dirname(__DIR__) . '/roundcube_oidc_suite.php');
+        self::assertFileDoesNotExist(dirname(__DIR__) . '/deployment/install-suite.sh');
+    }
 }

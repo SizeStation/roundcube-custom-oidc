@@ -21,6 +21,7 @@ final class OidcSchemaTest extends TestCase
             'sizestation_oidc_audit_log',
             'sizestation_oidc_replay_codes',
             'sizestation_oidc_rate_limits',
+            'ident_switch',
         ];
         foreach ($tables as $table) {
             $count = $database->query(
@@ -85,6 +86,9 @@ final class OidcSchemaTest extends TestCase
         self::assertSame('2026071602', $this->database()->query(
             "SELECT value FROM system WHERE name = 'sizestation_oidc-version'",
         )->fetchColumn());
+        self::assertSame('2026071700', $this->database()->query(
+            "SELECT value FROM system WHERE name = 'roundcube_oidc_suite-version'",
+        )->fetchColumn());
     }
 
     private function database(): PDO
@@ -93,7 +97,7 @@ final class OidcSchemaTest extends TestCase
         $database->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $database->exec('PRAGMA foreign_keys = ON');
         $database->exec('CREATE TABLE system (name varchar(64) primary key, value text)');
-        $database->exec(file_get_contents(__DIR__ . '/../SQL/sqlite.initial.sql'));
+        $database->exec(file_get_contents(dirname(__DIR__, 3) . '/SQL/sqlite.initial.sql'));
 
         return $database;
     }

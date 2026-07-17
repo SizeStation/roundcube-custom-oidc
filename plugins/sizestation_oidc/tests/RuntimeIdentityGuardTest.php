@@ -25,7 +25,7 @@ final class RuntimeIdentityGuardTest extends TestCase
         $pdo = new PDO('sqlite::memory:');
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->exec('CREATE TABLE system (name varchar(64) primary key, value text)');
-        $pdo->exec(file_get_contents(__DIR__ . '/../SQL/sqlite.initial.sql'));
+        $pdo->exec(file_get_contents(dirname(__DIR__, 3) . '/SQL/sqlite.initial.sql'));
         $pdo->exec(
             'CREATE TABLE users (user_id integer primary key, username varchar(254), mail_host varchar(255))',
         );

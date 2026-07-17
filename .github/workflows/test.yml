@@ -23,18 +23,6 @@ jobs:
       - run: composer install --no-interaction --no-progress
       - run: composer test
       - run: composer lint
-      - run: sh tests/install-suite.sh
-
-  image:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
-          tags: sizestation/roundcube-oidc:test
 
   postgres-schema:
     runs-on: ubuntu-latest
@@ -61,10 +49,7 @@ jobs:
             'CREATE TABLE system (name varchar(64) PRIMARY KEY, value text)'
           psql -h 127.0.0.1 -U postgres -d roundcube -c \
             'CREATE TABLE users (user_id integer PRIMARY KEY); CREATE TABLE identities (identity_id integer PRIMARY KEY)'
-          psql -h 127.0.0.1 -U postgres -d roundcube \
-            -f plugins/ident_switch/SQL/postgres.initial.sql
-          psql -h 127.0.0.1 -U postgres -d roundcube \
-            -f plugins/sizestation_oidc/SQL/postgres.initial.sql
+          psql -h 127.0.0.1 -U postgres -d roundcube -f SQL/postgres.initial.sql
           test "$(psql -h 127.0.0.1 -U postgres -d roundcube -Atc \
             "SELECT value FROM system WHERE name='sizestation_oidc-version'")" = 2026071602
 
@@ -93,7 +78,6 @@ jobs:
             'CREATE TABLE system (name varchar(64) PRIMARY KEY, value text)'
           mysql -h 127.0.0.1 -u root roundcube -e \
             'CREATE TABLE users (user_id int unsigned PRIMARY KEY); CREATE TABLE identities (identity_id int unsigned PRIMARY KEY)'
-          mysql -h 127.0.0.1 -u root roundcube < plugins/ident_switch/SQL/mysql.initial.sql
-          mysql -h 127.0.0.1 -u root roundcube < plugins/sizestation_oidc/SQL/mysql.initial.sql
+          mysql -h 127.0.0.1 -u root roundcube < SQL/mysql.initial.sql
           test "$(mysql -h 127.0.0.1 -u root -N -s roundcube -e \
             "SELECT value FROM system WHERE name='sizestation_oidc-version'")" = 2026071602

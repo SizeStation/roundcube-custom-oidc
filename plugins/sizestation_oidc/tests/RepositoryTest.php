@@ -81,7 +81,7 @@ namespace SizeStation\Roundcube\Tests\Oidc {
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $pdo->exec('PRAGMA foreign_keys = ON');
             $pdo->exec('CREATE TABLE system (name varchar(64) primary key, value text)');
-            $pdo->exec(file_get_contents(__DIR__ . '/../SQL/sqlite.initial.sql'));
+            $pdo->exec(file_get_contents(dirname(__DIR__, 3) . '/SQL/sqlite.initial.sql'));
             $this->database = new \rcube_db($pdo);
         }
 

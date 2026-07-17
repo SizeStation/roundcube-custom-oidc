@@ -1,0 +1,6 @@
+<?php
+
+// Application-specific settings are supplied through a Roundcube config file,
+// for example /var/roundcube/config/sizestation_oidc.php in the Docker image.
+// See deployment/roundcube-config.inc.php for the supported environment and
+// environment-file variables.

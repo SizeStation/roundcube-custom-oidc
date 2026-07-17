@@ -27,13 +27,13 @@ placeholders only and must not be deployed before replacing them.
 composer install
 composer test
 composer lint
-sh tests/install-suite.sh
 ```
 
 Production uses the official Roundcube image with
 `ROUNDCUBEMAIL_COMPOSER_PLUGINS=sizestation/roundcube-oidc-suite:VERSION`.
-The supplied post-setup task installs both bundled plugin trees and their CLI.
-The Dockerfile remains an optional CI/offline fallback, not the primary deploy.
+The package is a standard `roundcube-plugin`; Roundcube's Composer installer
+places it directly in `plugins/roundcube_oidc_suite`, creates its config stub,
+and applies its database schema. No custom image or deployment installer runs.
 
 ## Licence and source availability
 

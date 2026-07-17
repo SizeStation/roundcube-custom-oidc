@@ -17,6 +17,7 @@
 
 $sizeStationAutoloaders = [
     '/opt/sizestation/vendor/autoload.php',
+    dirname(__DIR__, 4) . '/vendor/autoload.php',
     dirname(__DIR__, 2) . '/vendor/autoload.php',
 ];
 foreach ($sizeStationAutoloaders as $sizeStationAutoloader) {
@@ -141,7 +142,7 @@ class ident_switch extends rcube_plugin
             $rc->config->set('messages_cache', false);
 
             if ($args['task'] === 'mail') {
-                $this->add_texts('localization/');
+                $this->add_texts('plugins/ident_switch/localization/');
                 $rc->config->set('create_default_folders', false);
             }
         }
@@ -168,7 +169,7 @@ class ident_switch extends rcube_plugin
 
         match ($rc->task) {
             'mail' => $this->render_switch($rc, $args),
-            'settings' => $this->include_script('ident_switch-form.js'),
+            'settings' => $this->include_script('plugins/ident_switch/ident_switch-form.js'),
             default => null,
         };
 
@@ -228,8 +229,8 @@ class ident_switch extends rcube_plugin
             return;
         }
 
-        $this->include_stylesheet('ident_switch.css');
-        $this->include_script('ident_switch-switch.js');
+        $this->include_stylesheet('plugins/ident_switch/ident_switch.css');
+        $this->include_script('plugins/ident_switch/ident_switch-switch.js');
 
         // Pass config to JS environment
         $rc->output->set_env('ident_switch_iid_map', $iidMap);
