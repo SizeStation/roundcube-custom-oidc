@@ -1,0 +1,2 @@
+/* Release-specific wrapper used to invalidate Roundcube's skin asset cache. */
+@import url("plugins/ident_switch/ident_switch.css?v=1.0.0-rc.20");

@@ -308,8 +308,8 @@ class ident_switch extends rcube_plugin
             return;
         }
 
-        $this->include_stylesheet('ident_switch-rc19.css');
-        $this->include_script('plugins/ident_switch/ident_switch-switch.js?v=1.0.0-rc.19');
+        $this->include_stylesheet('ident_switch-rc20.css');
+        $this->include_script('plugins/ident_switch/ident_switch-switch.js?v=1.0.0-rc.20');
 
         // Pass config to JS environment
         $rc->output->set_env('ident_switch_iid_map', $iidMap);
