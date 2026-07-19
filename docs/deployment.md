@@ -57,6 +57,12 @@ unauthenticated visit starts the Authentik authorization flow immediately.
 Set it to `false` in the installation's local `config.inc.php` only when a
 visible login page is required for troubleshooting.
 
+The stack mounts `deployment/roundcube-security.inc.php` through a Swarm config
+so Roundcube sees the public HTTPS origin before it initializes its session.
+It sets host-only `__Host-` session cookies with `Secure`, `HttpOnly`, path `/`,
+and `SameSite=Lax`. Keep this core config mounted; plugin configuration loads
+too late to establish cookie attributes safely.
+
 Changing the existing DES key invalidates Roundcube-encrypted data.
 Create the external Swarm `roundcube_bao_role_id` and
 `roundcube_bao_secret_id` secrets from the AppRole credentials.
@@ -132,6 +138,11 @@ official entrypoint consumes `roundcube_des_key`; the plugin consumes the OIDC
 secret and renewable Agent token. The Agent reaches OpenBao on the `openbao` overlay while
 Roundcube uses the configured TLS endpoint. Its runtime policy can read
 configuration and mailbox credentials but cannot write or list them.
+
+The tmpfs directory is root-writable and world-traversable (`0755`), while the
+rendered files remain read-only so Roundcube's unprivileged Apache process can
+consume them. Roundcube mounts the volume read-only. Do not restore the prior
+world-writable directory mode.
 
 Check services and sanitized logs, then perform the acceptance checks in
 `docs/verification.md`. Do not print or inspect rendered secret contents.

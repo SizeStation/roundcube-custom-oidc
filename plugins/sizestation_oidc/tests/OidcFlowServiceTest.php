@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace SizeStation\Roundcube\Tests\Oidc;
 
 use Firebase\JWT\JWT;
+use PDO;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use SizeStation\Roundcube\Oidc\Oidc\OidcClientConfig;
 use SizeStation\Roundcube\Oidc\Oidc\OidcFlowService;
 use SizeStation\Roundcube\Oidc\Oidc\OidcHttpResponse;
 use SizeStation\Roundcube\Oidc\Oidc\OidcHttpTransportInterface;
+use SizeStation\Roundcube\Oidc\Repository\CallbackSecurityRepository;
 use SizeStation\Roundcube\Oidc\Security\IdTokenValidator;
 use SizeStation\Roundcube\Oidc\Security\TokenValidationConfig;
 
@@ -80,6 +83,34 @@ final class OidcFlowServiceTest extends TestCase
 
         $this->expectException(RuntimeException::class);
         $service->complete($session, $query['state'], 'authorization-code');
+    }
+
+    #[RequiresPhpExtension('pdo_sqlite')]
+    public function testInvalidStateCannotConsumeTheSharedCallbackRateLimit(): void
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('CREATE TABLE system (name varchar(64) primary key, value text)');
+        $pdo->exec(file_get_contents(dirname(__DIR__, 3) . '/SQL/sqlite.initial.sql'));
+        $database = new \rcube_db($pdo);
+        $service = $this->service(
+            new FakeOidcTransport($this->metadata(), $this->jwks, ''),
+            new CallbackSecurityRepository($database),
+        );
+
+        for ($attempt = 0; $attempt < 21; $attempt++) {
+            $session = [];
+            try {
+                $service->complete($session, 'attacker-state', 'attacker-code-' . $attempt, 'shared-proxy');
+                self::fail('An invalid state must never reach the callback limiter');
+            } catch (RuntimeException $exception) {
+                self::assertStringContainsString('state', $exception->getMessage());
+            }
+        }
+
+        self::assertSame(0, (int) $pdo->query(
+            'SELECT COUNT(*) FROM sizestation_oidc_rate_limits',
+        )->fetchColumn());
     }
 
     public function testRejectsDiscoveryIssuerMismatch(): void
@@ -172,8 +203,10 @@ final class OidcFlowServiceTest extends TestCase
         ];
     }
 
-    private function service(OidcHttpTransportInterface $transport): OidcFlowService
-    {
+    private function service(
+        OidcHttpTransportInterface $transport,
+        ?CallbackSecurityRepository $callbackSecurity = null,
+    ): OidcFlowService {
         $config = new OidcClientConfig(
             'https://issuer.example/',
             'roundcube-client',
@@ -185,6 +218,7 @@ final class OidcFlowServiceTest extends TestCase
             $config,
             new IdTokenValidator(new TokenValidationConfig($config->issuer, $config->clientId)),
             http: $transport,
+            callbackSecurity: $callbackSecurity,
         );
     }
 

@@ -34,10 +34,12 @@ final class CredentialProviderRegistry
         $cached = $this->cache->get($key);
 
         if ($cached !== null) {
-            return $cached;
+            return MailboxCredentialBinding::validate($cached, $context->expectedMailbox);
         }
 
-        return $this->cache->put($key, $provider->getCredentials($account, $context));
+        $credentials = $this->cache->put($key, $provider->getCredentials($account, $context));
+
+        return MailboxCredentialBinding::validate($credentials, $context->expectedMailbox);
     }
 
     public function clear(): void

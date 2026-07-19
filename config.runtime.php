@@ -123,6 +123,8 @@ $config['sizestation_oidc.validation_timeout_seconds'] = 10;
 
 $config['ident_switch.managed_only'] = true;
 $config['ident_switch.check_mail'] = true;
+$config['ident_switch.round_robin'] = true;
+$config['ident_switch.check_interval_seconds'] = 30;
 $config['ident_switch.managed_imap_host'] = 'ssl://imap.purelymail.com';
 $config['ident_switch.managed_imap_port'] = 993;
 $config['ident_switch.managed_smtp_host'] = 'ssl://smtp.purelymail.com';

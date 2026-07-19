@@ -73,9 +73,15 @@ $config['ident_switch.check_mail'] = true;
 /*
  * Round-robin mode: check one identity per refresh cycle instead of all.
  * Useful with many accounts to reduce IMAP connections per refresh.
- * Default: false (all identities checked every cycle).
+ * Default: true (one identity checked per refresh cycle).
  */
-$config['ident_switch.round_robin'] = false;
+$config['ident_switch.round_robin'] = true;
+
+/*
+ * Minimum seconds between background checks in one authenticated session.
+ * Values are clamped to 5-300 seconds.
+ */
+$config['ident_switch.check_interval_seconds'] = 30;
 
 /*
  * Hide the warning shown to users when the newmail_notifier plugin is not active.
@@ -101,9 +107,9 @@ $config['ident_switch.preconfig_only'] = false;
 $config['ident_switch.debug'] = false;
 
 /*
- * Prevent users from creating new arbitrary secondary IMAP accounts. Existing
- * unmanaged accounts remain editable; externally managed rows are always
- * protected server-side regardless of this setting.
+ * Prevent users from creating or using arbitrary secondary IMAP accounts.
+ * Existing unmanaged rows are disabled and remain available only for cleanup;
+ * externally managed rows are always protected server-side.
  */
 $config['ident_switch.managed_only'] = false;
 

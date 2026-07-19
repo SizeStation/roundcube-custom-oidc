@@ -46,7 +46,11 @@ class roundcube_oidc_suite extends ident_switch
         $task = (string) ($args['task'] ?? '');
         $action = (string) ($args['action'] ?? '');
         if ($task === 'logout') {
-            $this->prepareLogout();
+            $rc = rcmail::get_instance();
+            $requestTokenValid = $rc->check_request(rcube_utils::INPUT_GET | rcube_utils::INPUT_POST);
+            if ($this->requestSecurityPolicy()->mayPrepareLogout($requestTokenValid)) {
+                $this->prepareLogout();
+            }
 
             return $args;
         }
@@ -97,6 +101,9 @@ class roundcube_oidc_suite extends ident_switch
                 $this->sourceIp(),
                 $_SERVER['HTTP_USER_AGENT'] ?? null,
             );
+            // Destroy the anonymous session ID before Roundcube authenticates it.
+            // Its later post-login rotation does not destroy the old session row.
+            $this->requestSecurityPolicy()->destroyAnonymousSession(rcmail::get_instance()->session);
 
             return ['task' => 'login', 'action' => 'login'];
         } catch (\SizeStation\Roundcube\Oidc\Domain\NoMailboxAssignedException $exception) {
@@ -149,7 +156,7 @@ class roundcube_oidc_suite extends ident_switch
     public function onAuthenticate(array $args): array
     {
         if ($this->loginPhase === null) {
-            return $args;
+            return $this->requestSecurityPolicy()->rejectNonOidcAuthentication($args);
         }
         try {
             $principalId = (int) $this->loginPhase->principal['id'];
@@ -448,7 +455,6 @@ class roundcube_oidc_suite extends ident_switch
         } catch (\Throwable $exception) {
             $this->failSafely('oidc_logout_discovery_failed', $exception, false);
         }
-        $session->clear($_SESSION);
     }
 
     private function recordReconciliationCompleted(
@@ -513,11 +519,23 @@ class roundcube_oidc_suite extends ident_switch
     {
         $session = new \SizeStation\Roundcube\Oidc\Session\OidcSession();
         $identity = $session->identity($_SESSION);
+        $rc = rcmail::get_instance();
         if ($identity === null) {
-            return true;
+            $roundcubeAuthenticated = !empty($_SESSION['user_id']) || !empty($rc->user?->ID);
+            if ($this->requestSecurityPolicy()->establishedSessionMayLackOidcIdentity($roundcubeAuthenticated)) {
+                return true;
+            }
+            unset($_SESSION['sizestation_oidc.preferred_switch_id']);
+            unset($_SESSION['sizestation_oidc.account_selection_pending']);
+            $this->failSafely(
+                'oidc_session_missing',
+                new \RuntimeException('OIDC identity is missing from the authenticated session'),
+            );
+            $rc->kill_session();
+
+            return false;
         }
 
-        $rc = rcmail::get_instance();
         try {
             $this->runtimeIdentityGuard()->assertEstablishedSession($identity, (int) $rc->user->ID);
 
@@ -750,7 +768,18 @@ class roundcube_oidc_suite extends ident_switch
 
     private function sourceKey(): string
     {
-        return $this->sourceIp() ?? 'unknown';
+        $requestToken = $_SESSION['request_token'] ?? null;
+
+        return $this->requestSecurityPolicy()->callbackSourceKey(
+            session_id(),
+            is_string($requestToken) ? $requestToken : null,
+            $this->sourceIp(),
+        );
+    }
+
+    private function requestSecurityPolicy(): \SizeStation\Roundcube\Oidc\Security\RequestSecurityPolicy
+    {
+        return new \SizeStation\Roundcube\Oidc\Security\RequestSecurityPolicy();
     }
 
     private function failSafely(string $code, \Throwable $exception, bool $show = true): void

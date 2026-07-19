@@ -7,6 +7,7 @@ namespace SizeStation\Roundcube\Credentials\Provider;
 use SizeStation\Roundcube\Credentials\AccountCredentials;
 use SizeStation\Roundcube\Credentials\CredentialContext;
 use SizeStation\Roundcube\Credentials\CredentialProviderInterface;
+use SizeStation\Roundcube\Credentials\MailboxCredentialBinding;
 use SizeStation\Roundcube\Credentials\Exception\InvalidAccountException;
 use SizeStation\Roundcube\Credentials\OpenBao\CredentialReference;
 use SizeStation\Roundcube\Credentials\OpenBao\OpenBaoKvV2Client;
@@ -35,14 +36,14 @@ final class OpenBaoCredentialProvider implements CredentialProviderInterface
         $username = $this->requiredString($secret, 'username');
         $password = $this->requiredString($secret, 'password');
 
-        return new AccountCredentials(
+        return MailboxCredentialBinding::validate(new AccountCredentials(
             $username,
             $password,
             $this->optionalString($secret, 'smtp_username'),
             $this->optionalString($secret, 'smtp_password'),
             $this->optionalString($secret, 'sieve_username'),
             $this->optionalString($secret, 'sieve_password'),
-        );
+        ), $context->expectedMailbox);
     }
 
     /** @param array<string, mixed> $secret */

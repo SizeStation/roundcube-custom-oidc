@@ -75,6 +75,19 @@ final class RuntimeConfigTest extends TestCase
         );
     }
 
+    public function testDeploymentSecurityConfigHardensProxyTlsAndSessionCookies(): void
+    {
+        $config = [];
+        require dirname(__DIR__) . '/deployment/roundcube-security.inc.php';
+
+        self::assertTrue($config['use_https']);
+        self::assertSame('', $config['session_domain']);
+        self::assertSame('/', $config['session_path']);
+        self::assertSame('Lax', $config['session_samesite']);
+        self::assertSame('__Host-roundcube_sessid', $config['session_name']);
+        self::assertSame('__Host-roundcube_sessauth', $config['session_auth_name']);
+    }
+
     public function testPackagedConfigSupportsOptionalCustomIdentityClaimAndScopes(): void
     {
         putenv('ROUNDCUBE_OIDC_SCOPES=openid profile email custom_identity');

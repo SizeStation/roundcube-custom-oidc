@@ -26,6 +26,23 @@ final class PackageSmokeTest extends TestCase
             $launcher,
         );
         self::assertStringContainsString('default: ' . $version, $launcher);
+        self::assertStringContainsString(
+            'roundcube/roundcubemail:1.7.2-apache@sha256:'
+            . '76503fb00caf1cb0ee7731723d5bf31b492383b689d532fa943c70e885913687',
+            $stack,
+        );
+        self::assertStringContainsString(
+            'roundcube/roundcubemail:1.7.2-apache@sha256:'
+            . '76503fb00caf1cb0ee7731723d5bf31b492383b689d532fa943c70e885913687',
+            $launcher,
+        );
+        self::assertStringContainsString(
+            'openbao/openbao:2.5.5@sha256:'
+            . '6150c4a6b62067db6141c8da7a6a6b5763f4f47c315343d0c848b40fecdfd452',
+            $stack,
+        );
+        self::assertStringContainsString('seb1k/elastic2022:1.7.1', $stack);
+        self::assertStringNotContainsString('seb1k/elastic2022:^', $stack);
 
         self::assertSame(1, preg_match('/-rc\.([0-9]+)\z/', $version, $releaseMatch));
         $plugin = (string) file_get_contents($root . '/plugins/ident_switch/ident_switch.php');
@@ -38,6 +55,23 @@ final class PackageSmokeTest extends TestCase
         self::assertStringContainsString(
             'plugins/ident_switch/ident_switch.css?v=' . $version,
             (string) file_get_contents($stylesheet),
+        );
+    }
+
+    public function testDeploymentUsesTlsOpenBaoAndNonWritableSharedSecretDirectory(): void
+    {
+        $root = dirname(__DIR__);
+        $stack = (string) file_get_contents($root . '/deployment/stack.yml');
+        $agent = (string) file_get_contents($root . '/deployment/roundcube-agent.hcl');
+
+        self::assertStringContainsString('address = "https://bao.sizestation.cloud"', $agent);
+        self::assertStringNotContainsString('address = "http://', $agent);
+        self::assertStringContainsString('mode=0755,nosuid,nodev,noexec', $stack);
+        self::assertStringNotContainsString('mode=1777', $stack);
+        self::assertStringContainsString('roundcube-bao-files:/run/secrets:ro', $stack);
+        self::assertStringContainsString(
+            'target: /var/roundcube/config/zz-security.inc.php',
+            $stack,
         );
     }
 
@@ -85,6 +119,7 @@ final class PackageSmokeTest extends TestCase
         self::assertDirectoryExists(dirname(__DIR__) . '/SQL');
         self::assertFileExists(dirname(__DIR__) . '/roundcube_oidc_suite.php');
         self::assertFileExists(dirname(__DIR__) . '/config.runtime.php');
+        self::assertFileExists(dirname(__DIR__) . '/deployment/roundcube-security.inc.php');
         self::assertFileIsReadable(dirname(__DIR__) . '/bin/install-roundcube-oidc.php');
         self::assertFileIsReadable(dirname(__DIR__) . '/bin/uninstall-roundcube-oidc.php');
         self::assertFileIsReadable(dirname(__DIR__) . '/bin/update-roundcube-oidc-db');

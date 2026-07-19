@@ -32,6 +32,18 @@ class IdentSwitchChecker
     public function check_new_mail(array $args): array
     {
         $rc = rcmail::get_instance();
+        $now = time();
+        $minimumInterval = max(
+            5,
+            min(300, (int) $rc->config->get('ident_switch.check_interval_seconds', 30)),
+        );
+        $lastCheck = (int) ($_SESSION['ident_switch_last_check_at'] ?? 0);
+        if ($lastCheck > $now - $minimumInterval) {
+            $this->send_counts($rc);
+
+            return $args;
+        }
+        $_SESSION['ident_switch_last_check_at'] = $now;
 
         $identities = $this->get_checkable_identities($rc);
 
@@ -55,7 +67,10 @@ class IdentSwitchChecker
             return $args;
         }
 
-        if ($rc->config->get('ident_switch.round_robin', false)) {
+        if (
+            $rc->config->get('ident_switch.managed_only', false)
+            || $rc->config->get('ident_switch.round_robin', true)
+        ) {
             // Round-robin: check one identity per refresh cycle
             $index = ($_SESSION['ident_switch_check_index'] ?? -1) + 1;
             if ($index >= count($identities)) {
@@ -246,7 +261,13 @@ class IdentSwitchChecker
             . 'INNER JOIN ' . $rc->db->table_name('identities') . ' ii ON isw.iid = ii.identity_id '
             . 'WHERE isw.user_id = ? AND isw.flags & ? > 0 AND isw.notify_check = ? AND isw.parent_id IS NULL';
 
-        $q = $rc->db->query($sql, $rc->user->ID, ident_switch::DB_ENABLED, ident_switch::NOTIFY_CHECK_ENABLED);
+        $parameters = [$rc->user->ID, ident_switch::DB_ENABLED, ident_switch::NOTIFY_CHECK_ENABLED];
+        if ($rc->config->get('ident_switch.managed_only', false)) {
+            $sql .= ' AND isw.managed_externally = ?';
+            $parameters[] = 1;
+        }
+
+        $q = $rc->db->query($sql, ...$parameters);
 
         $identities = [];
         while ($r = $rc->db->fetch_assoc($q)) {

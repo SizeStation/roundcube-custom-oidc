@@ -135,6 +135,7 @@ class ident_switch extends rcube_plugin
     public function on_startup(array $args): array
     {
         $rc = rcmail::get_instance();
+        $this->enforceManagedOnly($rc);
 
         $username = $rc->user?->data['username'] ?? null;
         $sessionUsername = $_SESSION['username'] ?? null;
@@ -167,6 +168,45 @@ class ident_switch extends rcube_plugin
         }
 
         return $args;
+    }
+
+    private function enforceManagedOnly(rcmail $rc): void
+    {
+        if (!$rc->config->get('ident_switch.managed_only', false) || empty($rc->user?->ID)) {
+            return;
+        }
+
+        $activeIdentityId = $_SESSION['iid' . self::MY_POSTFIX] ?? null;
+        $activeLegacyAccount = false;
+        if (is_numeric($activeIdentityId) && (int) $activeIdentityId !== -1) {
+            $query = $rc->db->query(
+                'SELECT id FROM ' . $rc->db->table_name(self::TABLE)
+                . ' WHERE user_id = ? AND iid = ? AND managed_externally = ?',
+                $rc->user->ID,
+                (int) $activeIdentityId,
+                0,
+            );
+            $activeLegacyAccount = is_array($rc->db->fetch_assoc($query));
+        }
+
+        $query = $rc->db->query(
+            'UPDATE ' . $rc->db->table_name(self::TABLE)
+            . ' SET flags = flags & ?, notify_check = ?'
+            . ' WHERE user_id = ? AND managed_externally = ? AND (flags & ? > 0 OR notify_check <> ?)',
+            ~self::DB_ENABLED,
+            self::NOTIFY_CHECK_DISABLED,
+            $rc->user->ID,
+            0,
+            self::DB_ENABLED,
+            self::NOTIFY_CHECK_DISABLED,
+        );
+        if (!$query) {
+            self::write_log('Unable to disable legacy accounts while managed-only mode is active.');
+        }
+
+        if ($activeLegacyAccount) {
+            $this->switcher->switchAccountById(-1, false);
+        }
     }
 
     private function activeAccountIsManaged(rcmail $rc): bool
@@ -247,7 +287,12 @@ class ident_switch extends rcube_plugin
             . " {$rc->db->table_name(self::TABLE)} isw"
             . " INNER JOIN {$rc->db->table_name('identities')} ii ON isw.iid=ii.identity_id"
             . " WHERE isw.user_id = ? AND isw.flags & ? > 0 AND isw.parent_id IS NULL";
-        $qRec = $rc->db->query($sql, $rc->user->data['user_id'], self::DB_ENABLED);
+        $parameters = [$rc->user->data['user_id'], self::DB_ENABLED];
+        if ($rc->config->get('ident_switch.managed_only', false)) {
+            $sql .= ' AND isw.managed_externally = ?';
+            $parameters[] = 1;
+        }
+        $qRec = $rc->db->query($sql, ...$parameters);
         while ($r = $rc->db->fetch_assoc($qRec)) {
             $accValues[] = $r['id'];
             $iidMap[$r['iid']] = $r['id'];
@@ -288,8 +333,8 @@ class ident_switch extends rcube_plugin
             return;
         }
 
-        // Run initial check and pass counts via env
-        $this->checker->check_new_mail([]);
+        // Initial page rendering must not wait on external credential or IMAP
+        // services. Refresh requests populate this cache asynchronously.
         $counts = $_SESSION['ident_switch_counts'] ?? [];
         $initialCounts = [];
         foreach ($counts as $cIid => $info) {

@@ -38,10 +38,17 @@ final class IdentSwitchCredentialService
     /** @param array<string, mixed> $account */
     public function resolve(array $account, CredentialPurpose $purpose): AccountCredentials
     {
+        $managed = $this->isManaged($account);
+        $expectedMailbox = $managed
+            ? (string) ($account['email'] ?? $account['username'] ?? '')
+            : null;
+
         return $this->registry->getCredentials($account, new CredentialContext(
             $purpose,
             $this->rc->user?->ID,
             $account['managed_assignment_id'] ?? null,
+            null,
+            $expectedMailbox,
         ));
     }
 

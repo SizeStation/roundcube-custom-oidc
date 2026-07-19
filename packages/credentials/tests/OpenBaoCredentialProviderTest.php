@@ -43,7 +43,10 @@ final class OpenBaoCredentialProviderTest extends TestCase
                 'credential_provider' => 'openbao',
                 'credential_reference' => 'assignment/1234',
                 'managed_externally' => 1,
-            ], new CredentialContext(CredentialPurpose::Imap));
+            ], new CredentialContext(
+                CredentialPurpose::Imap,
+                expectedMailbox: 'mailbox@example.test',
+            ));
 
             self::assertSame('mailbox@example.test', $credentials->imapUsername());
             self::assertSame('app-password', $credentials->imapPassword());

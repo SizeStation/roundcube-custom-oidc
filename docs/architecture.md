@@ -6,7 +6,7 @@ Status: phase 1 design baseline, 2026-07-16.
 
 - Upstream `ident_switch`: tag `5.0.4`, commit `8f45736b1bd74679721cd311e9a2ed306d2395f2`.
 - Live Roundcube: `1.7.2`, PHP `8.4.23`.
-- Live image digest: `roundcube/roundcubemail:1.7.x-apache@sha256:76503fb00caf1cb0ee7731723d5bf31b492383b689d532fa943c70e885913687`.
+- Live image digest: `roundcube/roundcubemail:1.7.2-apache@sha256:76503fb00caf1cb0ee7731723d5bf31b492383b689d532fa943c70e885913687`.
 - Live database: SQLite volume at `/var/roundcube/db`.
 - Live Roundcube has no third-party `ident_switch` installation.
 
@@ -142,10 +142,13 @@ different mailbox addresses.
    renewable runtime token sink into the shared tmpfs.
 3. The shared tmpfs follows the operator's established Agent pattern. Limit its
    mounts to the Agent and Roundcube services and mount it read-only in Roundcube.
-4. SMTP and provisioning validation use STARTTLS on port 587. The validator
+4. A minimal core Roundcube config declares the Traefik-terminated public origin
+   as HTTPS and establishes host-only, `SameSite=Lax` session cookies before
+   session initialization.
+5. SMTP and provisioning validation use STARTTLS on port 587. The validator
    requires STARTTLS to be advertised and successfully negotiates TLS before
    sending credentials.
-5. SQLite is suitable for the current single replica, but migrations and tests
+6. SQLite is suitable for the current single replica, but migrations and tests
    still cover all three claimed database families.
 
 ## Delivery sequence and commit gates

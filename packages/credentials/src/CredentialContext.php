@@ -11,6 +11,7 @@ final readonly class CredentialContext
         public ?int $roundcubeUserId = null,
         public ?string $assignmentId = null,
         public ?string $correlationId = null,
+        public ?string $expectedMailbox = null,
     ) {
     }
 }

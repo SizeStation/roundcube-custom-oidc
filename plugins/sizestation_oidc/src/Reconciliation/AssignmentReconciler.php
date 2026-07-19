@@ -33,7 +33,11 @@ final class AssignmentReconciler
         array $assignments,
         bool $manageTransaction = true,
     ): ReconciliationResult {
-        $this->validator->validateForLogin($assignments);
+        foreach ($assignments as $assignment) {
+            if ((int) ($assignment['principal_id'] ?? 0) !== $principalId) {
+                throw new RuntimeException('Assignment ownership changed during reconciliation');
+            }
+        }
         if ($manageTransaction && !$this->database->startTransaction()) {
             throw new RuntimeException('Unable to start assignment reconciliation');
         }
@@ -43,6 +47,11 @@ final class AssignmentReconciler
         $known = [];
         $materialized = [];
         try {
+            // The callback's assignment list can be stale by the time login is
+            // finalized. Re-read and lock the authoritative rows so a concurrent
+            // administrative disable cannot be overwritten by materialization.
+            $assignments = $this->loadCurrentAssignments($principalId);
+            $this->validator->validateForLogin($assignments);
             foreach ($assignments as $assignment) {
                 if ((int) ($assignment['principal_id'] ?? 0) !== $principalId) {
                     throw new RuntimeException('Assignment ownership changed during reconciliation');
@@ -53,7 +62,7 @@ final class AssignmentReconciler
                     if ($this->disableManagedRecord($assignmentId, $roundcubeUserId)) {
                         ++$disabled;
                     }
-                    $this->updateAssignment($assignmentId, $principalId, 'disabled', null, null);
+                    $this->updateAssignment($assignment, $principalId, 'disabled', null, null);
                     continue;
                 }
 
@@ -86,7 +95,7 @@ final class AssignmentReconciler
                     ++$updated;
                 }
                 $this->updateAssignment(
-                    $assignmentId,
+                    $assignment,
                     $principalId,
                     $anchor ? 'anchor' : 'materialized',
                     $recordId,
@@ -133,6 +142,31 @@ final class AssignmentReconciler
             }
             throw $exception;
         }
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function loadCurrentAssignments(int $principalId): array
+    {
+        $sql = 'SELECT * FROM ' . $this->database->table_name('sizestation_mailbox_assignments')
+            . ' WHERE principal_id = ? ORDER BY mailbox_address';
+        $provider = property_exists($this->database, 'db_provider')
+            ? strtolower((string) $this->database->db_provider)
+            : '';
+        if (in_array($provider, ['mysql', 'postgres', 'pgsql'], true)) {
+            $sql .= ' FOR UPDATE';
+        }
+
+        $query = $this->database->query($sql, $principalId);
+        if (!$query) {
+            throw new RuntimeException('Unable to load current mailbox assignments');
+        }
+
+        $assignments = [];
+        while ($assignment = $this->database->fetch_assoc($query)) {
+            $assignments[] = $assignment;
+        }
+
+        return $assignments;
     }
 
     /** @return array<string, mixed>|null */
@@ -372,8 +406,9 @@ final class AssignmentReconciler
         }
     }
 
+    /** @param array<string, mixed> $assignment */
     private function updateAssignment(
-        string $assignmentId,
+        array $assignment,
         int $principalId,
         string $status,
         ?int $recordId,
@@ -382,13 +417,19 @@ final class AssignmentReconciler
         $query = $this->database->query(
             'UPDATE ' . $this->database->table_name('sizestation_mailbox_assignments')
             . ' SET materialization_status = ?, ident_switch_record_id = ?, roundcube_identity_id = ?,'
-            . ' updated_at = ?, last_error_code = NULL WHERE id = ? AND principal_id = ?',
+            . ' updated_at = ?, last_error_code = NULL'
+            . ' WHERE id = ? AND principal_id = ? AND enabled = ? AND issuer = ?'
+            . ' AND external_user_id = ? AND updated_at = ?',
             $status,
             $recordId,
             $identityId,
             gmdate('Y-m-d\TH:i:s\Z'),
-            $assignmentId,
+            (string) $assignment['id'],
             $principalId,
+            !empty($assignment['enabled']) ? 1 : 0,
+            (string) $assignment['issuer'],
+            (string) $assignment['external_user_id'],
+            (string) $assignment['updated_at'],
         );
         if (!$query || $this->database->affected_rows($query) !== 1) {
             throw new RuntimeException('Unable to persist assignment materialization state');

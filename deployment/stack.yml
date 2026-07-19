@@ -1,6 +1,6 @@
 services:
   roundcube-bao-agent:
-    image: openbao/openbao:2.5.5
+    image: openbao/openbao:2.5.5@sha256:6150c4a6b62067db6141c8da7a6a6b5763f4f47c315343d0c848b40fecdfd452
     command: ["agent", "-config=/etc/openbao/agent.hcl"]
     configs:
       - source: roundcube_bao_agent
@@ -16,7 +16,7 @@ services:
       restart_policy: {condition: any, delay: 5s}
 
   roundcube:
-    image: roundcube/roundcubemail:1.7.x-apache
+    image: roundcube/roundcubemail:1.7.2-apache@sha256:76503fb00caf1cb0ee7731723d5bf31b492383b689d532fa943c70e885913687
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -30,7 +30,7 @@ services:
       ROUNDCUBE_OIDC_CLIENT_SECRET_FILE: "/run/secrets/oidc-client-secret"
       ROUNDCUBE_OIDC_REDIRECT_URI: "https://mail.sizestation.cloud/?_task=login&_action=plugin.sizestation_oidc.callback"
       ROUNDCUBE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://mail.sizestation.cloud/"
-      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.19,seb1k/elastic2022:^1.7"
+      ROUNDCUBEMAIL_COMPOSER_PLUGINS: "sizestation/roundcube-oidc-suite:1.0.0-rc.19,seb1k/elastic2022:1.7.1"
       ROUNDCUBEMAIL_PLUGINS: "archive,zipdownload,roundcube_oidc_suite"
       ROUNDCUBEMAIL_SKIN: elastic2022
       ROUNDCUBEMAIL_DB_TYPE: sqlite
@@ -40,6 +40,9 @@ services:
       ROUNDCUBEMAIL_DEFAULT_PORT: "993"
       ROUNDCUBEMAIL_SMTP_SERVER: "tls://smtp.purelymail.com"
       ROUNDCUBEMAIL_SMTP_PORT: "587"
+    configs:
+      - source: roundcube_security
+        target: /var/roundcube/config/zz-security.inc.php
     volumes:
       - roundcube_db:/var/roundcube/db
       - roundcube-bao-files:/run/secrets:ro
@@ -66,7 +69,7 @@ volumes:
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: size=1m,mode=1777,nosuid,nodev,noexec
+      o: size=1m,mode=0755,nosuid,nodev,noexec
 
 networks:
   public: {external: true}
@@ -74,6 +77,7 @@ networks:
 
 configs:
   roundcube_bao_agent: {file: ./roundcube-agent.hcl}
+  roundcube_security: {file: ./roundcube-security.inc.php}
 
 secrets:
   roundcube_bao_role_id: {external: true}

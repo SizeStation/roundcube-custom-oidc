@@ -53,8 +53,8 @@ final class OidcFlowService
         if ($state === '' || $code === '' || strlen($state) > 1024 || strlen($code) > 4096) {
             throw new RuntimeException('OIDC callback parameters are invalid');
         }
-        $this->callbackSecurity?->assertAttemptAllowed($source);
         $pending = $this->stateManager->consume($session, $state);
+        $this->callbackSecurity?->assertAttemptAllowed($source);
         if ($this->callbackSecurity !== null) {
             $this->callbackSecurity->claimAuthorizationCode($code);
         } else {
@@ -94,8 +94,8 @@ final class OidcFlowService
     /** @param array<string, mixed> $session */
     public function rejectProviderError(array &$session, string $state, string $source = 'unknown'): void
     {
-        $this->callbackSecurity?->assertAttemptAllowed($source);
         $this->stateManager->consumeError($session, $state);
+        $this->callbackSecurity?->assertAttemptAllowed($source);
     }
 
     public function endSessionUrl(string $postLogoutRedirectUri, ?string $idTokenHint = null): ?string

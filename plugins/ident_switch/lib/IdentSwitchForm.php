@@ -98,6 +98,11 @@ class IdentSwitchForm
 
         $params = [$rc->user->ID, ident_switch::DB_ENABLED];
 
+        if ($rc->config->get('ident_switch.managed_only', false)) {
+            $sql .= ' AND isw.managed_externally = ?';
+            $params[] = 1;
+        }
+
         if ($excludeIid !== null) {
             $sql .= ' AND isw.iid != ?';
             $params[] = $excludeIid;
@@ -619,6 +624,14 @@ class IdentSwitchForm
             return $args;
         }
 
+        if (
+            $row
+            && $rc->config->get('ident_switch.managed_only', false)
+            && !$this->credentials->isManaged($row)
+        ) {
+            return $args;
+        }
+
         $record = &$args['record'];
 
         // Tell JS whether this identity has an existing ident_switch record
@@ -785,6 +798,10 @@ class IdentSwitchForm
             }
 
             return $args;
+        }
+
+        if ($account !== null && $rc->config->get('ident_switch.managed_only', false)) {
+            return $this->managedOnlyError($args);
         }
 
         // Do not do anything for default identity

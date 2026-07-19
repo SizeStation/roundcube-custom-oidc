@@ -35,12 +35,20 @@ namespace {
                     }
                 };
                 $this->output = new class {
+                    /** @var list<array{0: string, 1: mixed}> */
+                    public array $commands = [];
+
                     public function redirect(array $target): void
                     {
                     }
 
                     public function show_message(string $message, string $type): void
                     {
+                    }
+
+                    public function command(string $command, mixed $data): void
+                    {
+                        $this->commands[] = [$command, $data];
                     }
                 };
                 self::$instance = $this;
@@ -71,6 +79,31 @@ namespace {
         }
     }
 
+    if (!class_exists('rcube_imap_generic', false)) {
+        final class rcube_imap_generic
+        {
+            public static int $connections = 0;
+            public string $error = '';
+
+            public function connect(string $host, string $username, string $password, array $options): bool
+            {
+                ++self::$connections;
+
+                return true;
+            }
+
+            /** @return array{UNSEEN: int} */
+            public function status(string $mailbox, array $items): array
+            {
+                return ['UNSEEN' => 0];
+            }
+
+            public function closeConnection(): void
+            {
+            }
+        }
+    }
+
     if (!class_exists('ident_switch', false)) {
         final class ident_switch
         {
@@ -84,6 +117,7 @@ namespace {
             public const SIEVE_AUTH_NONE = 0;
             public const SIEVE_AUTH_IMAP = 1;
             public const SIEVE_AUTH_CUSTOM = 2;
+            public const NOTIFY_CHECK_ENABLED = 1;
 
             public static function debug_log(string $message): void
             {
@@ -126,6 +160,7 @@ namespace {
     require_once dirname(__DIR__) . '/lib/IdentSwitchCredentialService.php';
     require_once dirname(__DIR__) . '/lib/IdentSwitchSwitcher.php';
     require_once dirname(__DIR__) . '/lib/IdentSwitchForm.php';
+    require_once dirname(__DIR__) . '/lib/IdentSwitchChecker.php';
 }
 
 namespace SizeStation\Roundcube\Tests\IdentSwitch {
@@ -142,6 +177,7 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
         {
             $_SESSION = [];
             $_POST = [];
+            \rcube_imap_generic::$connections = 0;
             $pdo = new PDO('sqlite::memory:');
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $pdo->exec('CREATE TABLE system (name varchar(64) primary key, value text)');
@@ -309,6 +345,98 @@ namespace SizeStation\Roundcube\Tests\IdentSwitch {
             self::assertFalse($result['result']);
             self::assertSame('ident_switch.err.managed_only', $result['message']);
             self::assertArrayNotHasKey('createData' . \ident_switch::MY_POSTFIX, $_SESSION);
+        }
+
+        public function testManagedOnlyModeRejectsEnabledLegacyAccountAtEveryConnectionHook(): void
+        {
+            $this->roundcube->config->values['ident_switch.managed_only'] = true;
+            $this->roundcube->db->query(
+                'UPDATE ident_switch SET flags = ?, imap_host = ?, smtp_host = ?, sieve_host = ? WHERE id = ?',
+                1,
+                'ssl://attacker.example',
+                'ssl://attacker.example',
+                'ssl://attacker.example',
+                1,
+            );
+            $switcher = new \IdentSwitchSwitcher(new \IdentSwitchCredentialService($this->roundcube));
+            $_SESSION = ['username' => 'anchor@example.test', 'sentinel' => 'unchanged'];
+            $before = $_SESSION;
+
+            self::assertFalse($switcher->switchAccountById(1, false));
+            self::assertSame($before, $_SESSION);
+
+            $_SESSION['iid' . \ident_switch::MY_POSTFIX] = 101;
+            $smtp = ['smtp_host' => 'trusted', 'smtp_user' => 'anchor'];
+            $sieve = ['host' => 'trusted', 'user' => 'anchor'];
+            self::assertSame($smtp, $switcher->configure_smtp($smtp));
+            self::assertSame($sieve, $switcher->configure_managesieve($sieve));
+        }
+
+        public function testManagedOnlyModeRejectsEditsToExistingLegacyAccount(): void
+        {
+            $this->roundcube->config->values['ident_switch.managed_only'] = true;
+            $this->roundcube->db->query(
+                'UPDATE ident_switch SET flags = ?, imap_host = ?, smtp_host = ? WHERE id = ?',
+                1,
+                'ssl://legacy-imap.example',
+                'ssl://legacy-smtp.example',
+                1,
+            );
+            $_POST = [
+                '_ident_switch_form_common_mode' => 'separate',
+                '_ident_switch_form_imap_host' => 'ssl://attacker.example',
+                '_ident_switch_form_smtp_host' => 'ssl://attacker.example',
+            ];
+            $form = new \IdentSwitchForm(
+                new \ident_switch(),
+                new \IdentSwitchCredentialService($this->roundcube),
+            );
+
+            $result = $form->on_identity_update([
+                'id' => 101,
+                'record' => ['email' => 'legacy@example.test'],
+            ]);
+
+            self::assertTrue($result['abort']);
+            self::assertFalse($result['result']);
+            self::assertSame('ident_switch.err.managed_only', $result['message']);
+            $hosts = $this->roundcube->db->pdo->query(
+                'SELECT imap_host, smtp_host FROM ident_switch WHERE id = 1',
+            )->fetch(PDO::FETCH_ASSOC);
+            self::assertSame('ssl://legacy-imap.example', $hosts['imap_host']);
+            self::assertSame('ssl://legacy-smtp.example', $hosts['smtp_host']);
+        }
+
+        public function testUnreadChecksAreRoundRobinAndRateLimitedPerSession(): void
+        {
+            $this->roundcube->config->values['ident_switch.round_robin'] = true;
+            $this->roundcube->config->values['ident_switch.check_interval_seconds'] = 30;
+            $this->roundcube->db->query(
+                'UPDATE ident_switch SET flags = ?, notify_check = ? WHERE id = ?',
+                1,
+                1,
+                1,
+            );
+            $this->insertAccount(2, 102, 1, 0);
+            $this->roundcube->db->query('UPDATE ident_switch SET notify_check = ? WHERE id = ?', 1, 2);
+            $this->roundcube->db->query(
+                'INSERT INTO identities (identity_id, user_id, email) VALUES (?, ?, ?), (?, ?, ?)',
+                101,
+                10,
+                'first@example.test',
+                102,
+                10,
+                'second@example.test',
+            );
+            $_SESSION['username'] = 'anchor@example.test';
+            $checker = new \IdentSwitchChecker(new \IdentSwitchCredentialService($this->roundcube));
+
+            $checker->check_new_mail([]);
+            self::assertSame(1, \rcube_imap_generic::$connections);
+
+            $checker->check_new_mail([]);
+            self::assertSame(1, \rcube_imap_generic::$connections);
+            self::assertGreaterThan(0, $_SESSION['ident_switch_last_check_at']);
         }
 
         public function testCraftedManagedUpdateCannotChangeEmailProviderReferenceOrHosts(): void

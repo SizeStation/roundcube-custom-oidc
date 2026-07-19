@@ -82,6 +82,9 @@ class IdentSwitchSwitcher
             $q = $rc->db->query($sql, $identId, $rc->user->ID, ident_switch::DB_ENABLED);
             $r = $rc->db->fetch_assoc($q);
             if (is_array($r)) {
+                if ($this->rejectLegacyAccountInManagedOnlyMode($rc, $r, 'switch')) {
+                    return false;
+                }
                 $r['username'] = ident_switch::resolve_username((int)$r['iid'], $r['username']);
                 $credentials = $this->resolveCredentials(
                     $r,
@@ -210,6 +213,9 @@ class IdentSwitchSwitcher
         $q = $rc->db->query($sql, $iid, $rc->user->ID, ident_switch::DB_ENABLED);
         $r = $rc->db->fetch_assoc($q);
         if (is_array($r)) {
+            if ($this->rejectLegacyAccountInManagedOnlyMode($rc, $r, 'SMTP')) {
+                return $args;
+            }
             // If this is an alias, follow parent_id to get the parent's SMTP config
             if (!empty($r['parent_id'])) {
                 ident_switch::debug_log("SMTP: identity {$iid} is alias, following parent_id={$r['parent_id']}");
@@ -221,6 +227,9 @@ class IdentSwitchSwitcher
                 $r = $rc->db->fetch_assoc($q);
                 if (!is_array($r)) {
                     ident_switch::debug_log("SMTP: parent account not found, using default config");
+                    return $args;
+                }
+                if ($this->rejectLegacyAccountInManagedOnlyMode($rc, $r, 'SMTP parent')) {
                     return $args;
                 }
                 $iid = $r['iid'];
@@ -301,6 +310,9 @@ class IdentSwitchSwitcher
         $q = $rc->db->query($sql, $iid, $rc->user->ID, ident_switch::DB_ENABLED);
         $r = $rc->db->fetch_assoc($q);
         if (is_array($r)) {
+            if ($this->rejectLegacyAccountInManagedOnlyMode($rc, $r, 'Sieve')) {
+                return $args;
+            }
             // If this is an alias, follow parent_id to get the parent's Sieve config
             if (!empty($r['parent_id'])) {
                 ident_switch::debug_log("Sieve: identity {$iid} is alias, following parent_id={$r['parent_id']}");
@@ -312,6 +324,9 @@ class IdentSwitchSwitcher
                 $r = $rc->db->fetch_assoc($q);
                 if (!is_array($r)) {
                     ident_switch::debug_log("Sieve: parent account not found, using default config");
+                    return $args;
+                }
+                if ($this->rejectLegacyAccountInManagedOnlyMode($rc, $r, 'Sieve parent')) {
                     return $args;
                 }
                 $iid = $r['iid'];
@@ -366,6 +381,24 @@ class IdentSwitchSwitcher
         }
 
         return $args;
+    }
+
+    /** @param array<string, mixed> $account */
+    private function rejectLegacyAccountInManagedOnlyMode(
+        rcmail $rc,
+        array $account,
+        string $operation,
+    ): bool {
+        if (
+            !$rc->config->get('ident_switch.managed_only', false)
+            || $this->credentials->isManaged($account)
+        ) {
+            return false;
+        }
+
+        ident_switch::write_log("Blocked legacy account during {$operation} in managed-only mode.");
+
+        return true;
     }
 
     /**

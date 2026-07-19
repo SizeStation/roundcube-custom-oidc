@@ -137,11 +137,9 @@ final class ReconciliationTest extends TestCase
             . " WHERE id = '00000000-0000-4000-8000-000000000002'",
         );
 
-        $result = $reconciler->reconcile($this->principalId, 10, $repository->forPrincipal(
-            $this->principalId,
-            'https://issuer.example',
-            'external-1',
-        ));
+        // Pass the pre-disable callback snapshot. Reconciliation must ignore its
+        // stale enabled bit and reload the authoritative row inside its transaction.
+        $result = $reconciler->reconcile($this->principalId, 10, $bound);
         self::assertSame(1, $result->disabled);
         self::assertSame(0, (int) $this->database->pdo->query(
             "SELECT flags FROM ident_switch"

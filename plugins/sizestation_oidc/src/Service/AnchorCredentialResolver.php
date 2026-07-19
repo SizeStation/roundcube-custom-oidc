@@ -29,6 +29,8 @@ final class AnchorCredentialResolver
             CredentialPurpose::Imap,
             $roundcubeUserId,
             (string) $assignment['id'],
+            null,
+            (string) ($assignment['mailbox_address'] ?? ''),
         ));
         $mailbox = (string) new MailboxAddress((string) ($assignment['mailbox_address'] ?? ''));
         $username = (string) new MailboxAddress($credentials->imapUsername());

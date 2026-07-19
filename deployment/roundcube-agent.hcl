@@ -1,5 +1,5 @@
 vault {
-  address = "http://openbao_openbao:8200"
+  address = "https://bao.sizestation.cloud"
 }
 
 auto_auth {
